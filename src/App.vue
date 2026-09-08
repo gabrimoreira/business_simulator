@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { RouterView } from 'vue-router'
+import AwayModal from '@/components/AwayModal.vue'
 import BottomNav from '@/components/BottomNav.vue'
 import NewGamePanel from '@/components/NewGamePanel.vue'
 import StatusBar from '@/components/StatusBar.vue'
@@ -8,9 +9,18 @@ import { useGameStore } from '@/stores/game'
 
 const game = useGameStore()
 
-onMounted(() => {
-  void game.load()
+onMounted(async () => {
+  await game.load()
+  if (game.hasGame) game.startTicker()
 })
+
+// A partida pode nascer depois do load (tela de nova partida).
+watch(
+  () => game.hasGame,
+  (has) => (has ? game.startTicker() : game.stopTicker()),
+)
+
+onUnmounted(() => game.stopTicker())
 </script>
 
 <template>
@@ -36,6 +46,12 @@ onMounted(() => {
         <RouterView />
       </main>
       <BottomNav />
+      <AwayModal
+        v-if="game.awayLog.length"
+        :log="game.awayLog"
+        :title="game.awayTitle"
+        @close="game.clearAwayLog()"
+      />
     </template>
   </div>
 </template>

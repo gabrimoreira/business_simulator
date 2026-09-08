@@ -2,13 +2,48 @@
 import { computed, ref } from 'vue'
 import ScreenTitle from '@/components/ScreenTitle.vue'
 import { useGameStore } from '@/stores/game'
-import { formatMoneyCompact } from '@/lib/format'
+import { formatMoney, formatMoneyCompact } from '@/lib/format'
+import { JOBS, findJob } from '@/data/jobs'
+import { COURSES, findCourse } from '@/data/courses'
+import { jobEligibility } from '@/engine/player'
+import { CAREER } from '@/data/config'
 
 const game = useGameStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 const message = ref<string | null>(null)
 
 const player = computed(() => game.state?.player ?? null)
+
+const job = computed(() => (player.value?.currentJobId ? findJob(player.value.currentJobId) : null))
+
+const activeCourse = computed(() => {
+  const active = player.value?.activeCourse
+  if (!active) return null
+  const course = findCourse(active.courseId)
+  if (!course) return null
+  return { course, done: active.daysDone, total: course.studyDays }
+})
+
+/** Vagas com o motivo da recusa à vista — a mesma resposta que a ação usa. */
+const openings = computed(() => {
+  const state = game.state
+  if (!state) return []
+  return JOBS.filter((item) => item.id !== state.player.currentJobId).map((item) => ({
+    job: item,
+    eligibility: jobEligibility(state, item.id),
+  }))
+})
+
+const availableCourses = computed(() => {
+  const p = player.value
+  if (!p) return []
+  return COURSES.filter((course) => !p.education.includes(course.id)).map((course) => ({
+    course,
+    blocked:
+      course.requires.find((id) => !p.education.includes(id)) ??
+      (p.money < course.cost ? 'sem dinheiro' : null),
+  }))
+})
 
 const skills = computed(() => {
   const s = player.value?.skills
@@ -64,25 +99,128 @@ async function deleteGame(): Promise<void> {
             {{ formatMoneyCompact(game.playerNetWorth) }}
           </p>
         </div>
-        <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <div class="flex justify-between">
-            <dt class="text-muted">Idade</dt>
+        <dl class="mt-3 grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
+          <div class="flex justify-between gap-2">
+            <dt class="shrink-0 text-muted">Idade</dt>
             <dd class="tnum">{{ player.age }}</dd>
           </div>
-          <div class="flex justify-between">
-            <dt class="text-muted">Emprego</dt>
-            <dd>{{ player.currentJobId ?? 'nenhum' }}</dd>
+          <div class="flex justify-between gap-2">
+            <dt class="shrink-0 text-muted">Emprego</dt>
+            <dd class="truncate text-right">{{ job?.title ?? 'nenhum' }}</dd>
           </div>
-          <div class="flex justify-between">
-            <dt class="text-muted">Score</dt>
+          <div class="flex justify-between gap-2">
+            <dt class="shrink-0 text-muted">Score</dt>
             <dd class="tnum">{{ player.creditScore }}</dd>
           </div>
-          <div class="flex justify-between">
-            <dt class="text-muted">Reputação</dt>
+          <div class="flex justify-between gap-2">
+            <dt class="shrink-0 text-muted">Reputação</dt>
             <dd class="tnum">{{ player.publicReputation }}</dd>
           </div>
         </dl>
       </div>
+    </section>
+
+    <section v-if="player" class="px-4 pt-4">
+      <h2 class="pb-2 text-sm font-medium text-muted">Carreira</h2>
+      <div class="rounded-2xl border border-line bg-surface p-4">
+        <template v-if="job">
+          <div class="flex items-baseline justify-between">
+            <p class="text-sm font-medium">{{ job.title }}</p>
+            <p class="tnum text-sm text-accent">{{ formatMoney(player.career.salary) }}/mês</p>
+          </div>
+          <div class="mt-3">
+            <div class="flex items-baseline justify-between">
+              <span class="text-xs text-muted">Desempenho</span>
+              <span class="tnum text-xs text-muted">
+                {{ Math.round(player.career.performance) }}/{{ CAREER.minPerformanceForPromotion }}
+                para promoção
+              </span>
+            </div>
+            <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2">
+              <div
+                class="h-full rounded-full bg-accent"
+                :style="{ width: `${Math.max(0, Math.min(100, player.career.performance))}%` }"
+              />
+            </div>
+          </div>
+          <p class="tnum mt-2 text-xs text-muted">{{ player.career.daysInJob }} dias no cargo</p>
+          <button
+            class="mt-3 min-h-[40px] w-full rounded-xl border border-line text-sm text-muted"
+            @click="game.dispatch({ kind: 'pedirDemissao' })"
+          >
+            Pedir demissão
+          </button>
+        </template>
+        <p v-else class="text-sm text-muted">Sem emprego. Candidate-se a uma vaga abaixo.</p>
+      </div>
+    </section>
+
+    <section class="px-4 pt-4">
+      <h2 class="pb-2 text-sm font-medium text-muted">Vagas</h2>
+      <ul class="flex flex-col gap-2">
+        <li
+          v-for="opening in openings"
+          :key="opening.job.id"
+          class="rounded-xl border border-line bg-surface p-3"
+        >
+          <div class="flex items-baseline justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-sm font-medium">{{ opening.job.title }}</p>
+              <p class="tnum text-xs text-muted">
+                {{ formatMoney(opening.job.salary) }}/mês · desgaste {{ opening.job.wear }}
+              </p>
+            </div>
+            <button
+              class="min-h-[40px] shrink-0 rounded-lg bg-accent px-3 text-sm font-semibold text-bg disabled:opacity-30"
+              :disabled="!opening.eligibility.ok"
+              @click="game.dispatch({ kind: 'candidatar', jobId: opening.job.id })"
+            >
+              Candidatar
+            </button>
+          </div>
+          <p v-if="!opening.eligibility.ok" class="pt-1.5 text-[11px] text-muted">
+            {{ opening.eligibility.missing.join(' · ') }}
+          </p>
+        </li>
+      </ul>
+    </section>
+
+    <section class="px-4 pt-4">
+      <h2 class="pb-2 text-sm font-medium text-muted">Educação</h2>
+      <div v-if="activeCourse" class="mb-2 rounded-xl border border-line bg-surface p-3">
+        <div class="flex items-baseline justify-between">
+          <p class="text-sm font-medium">{{ activeCourse.course.name }}</p>
+          <p class="tnum text-xs text-muted">{{ activeCourse.done }}/{{ activeCourse.total }}</p>
+        </div>
+        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
+          <div
+            class="h-full rounded-full bg-accent"
+            :style="{ width: `${(activeCourse.done / activeCourse.total) * 100}%` }"
+          />
+        </div>
+      </div>
+      <ul class="flex flex-col gap-2">
+        <li
+          v-for="item in availableCourses"
+          :key="item.course.id"
+          class="flex items-baseline justify-between gap-3 rounded-xl border border-line bg-surface p-3"
+        >
+          <div class="min-w-0">
+            <p class="text-sm font-medium">{{ item.course.name }}</p>
+            <p class="tnum text-xs text-muted">
+              {{ formatMoney(item.course.cost) }} · {{ item.course.studyDays }} blocos de estudo
+            </p>
+            <p v-if="item.blocked" class="text-[11px] text-muted">Requer: {{ item.blocked }}</p>
+          </div>
+          <button
+            class="min-h-[40px] shrink-0 rounded-lg border border-line px-3 text-sm font-medium disabled:opacity-30"
+            :disabled="!!item.blocked || !!activeCourse"
+            @click="game.dispatch({ kind: 'matricular', courseId: item.course.id })"
+          >
+            Matricular
+          </button>
+        </li>
+      </ul>
     </section>
 
     <section class="px-4 pt-4">

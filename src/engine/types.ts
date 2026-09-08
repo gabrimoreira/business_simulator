@@ -117,6 +117,8 @@ export interface Player {
   notoriety: number
   /** Blocos já gastos hoje (teto em config.ACTION_BLOCKS_PER_DAY). */
   blocksUsedToday: number
+  /** Refeições feitas hoje (teto em config.MEALS_PER_DAY). Comer é livre de bloco. */
+  mealsToday: number
   /**
    * Rotina usada pelo avanço rápido de tempo (GAME_DESIGN C1): a ordem em que
    * os blocos do dia são gastos automaticamente.
@@ -124,6 +126,12 @@ export interface Player {
   routine: ActionBlockKind[]
   /** Contatos ganhos socializando; alimenta oportunidades e lobby. */
   contacts: number
+  /**
+   * Contas de casa vencidas e não pagas. Sem banco até a Fase 2, é aqui que a
+   * conta fica: acumula, drena humor e score, e é quitada assim que entra
+   * dinheiro.
+   */
+  overdueBills: Money
   office: PublicOffice | null
   /** Dias restantes de prisão; > 0 bloqueia ações e cargos de gestão (§5.7). */
   incarceratedDays: number

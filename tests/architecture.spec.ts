@@ -54,7 +54,14 @@ const FORBIDDEN: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\bsetTimeout\b|\bsetInterval\b/, reason: 'timers — o tick é chamado pela UI' },
 ]
 
-const FORBIDDEN_IMPORTS = ['vue', 'pinia', 'idb', '@vueuse', 'immer/src']
+const FORBIDDEN_IMPORTS = ['vue', 'pinia', 'idb', '@vueuse']
+
+/**
+ * Únicos pacotes que a engine pode importar. Immer entra porque o CLAUDE.md §2
+ * exige `produce` para mutação — é biblioteca de estrutura de dados pura, sem
+ * IO, sem DOM e sem relógio.
+ */
+const ALLOWED_PACKAGES = new Set(['immer'])
 
 describe('arquitetura da engine', () => {
   it('encontrou arquivos para analisar', () => {
@@ -78,6 +85,7 @@ describe('arquitetura da engine', () => {
       const source = stripComments(readFileSync(file, 'utf8'))
       const bad = importsOf(source).filter((specifier) => {
         if (FORBIDDEN_IMPORTS.some((forbidden) => specifier.startsWith(forbidden))) return true
+        if (ALLOWED_PACKAGES.has(specifier)) return false
         const isEngine = specifier.startsWith('./') || /^\.\.\/(?!data\/)/.test(specifier)
         const isData = specifier.startsWith('../data/') || specifier.startsWith('@/data/')
         return !isEngine && !isData

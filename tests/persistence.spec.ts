@@ -41,8 +41,23 @@ describe('migrations', () => {
     const legacy = JSON.parse(toJson(fixture())) as Record<string, unknown>
     legacy.saveVersion = SAVE_VERSION - 1
     const player = legacy.player as Record<string, unknown>
+    delete player.overdueBills
+    delete player.mealsToday
+
+    const migrated = migrate(legacy)
+
+    expect(migrated.saveVersion).toBe(SAVE_VERSION)
+    expect(migrated.player.overdueBills).toBe(0)
+    expect(migrated.player.mealsToday).toBe(0)
+  })
+
+  it('percorre a cadeia inteira a partir da versão 0', () => {
+    const legacy = JSON.parse(toJson(fixture())) as Record<string, unknown>
+    legacy.saveVersion = 0
+    const player = legacy.player as Record<string, unknown>
     delete player.routine
     delete player.blocksUsedToday
+    delete player.overdueBills
     delete legacy.meta
 
     const migrated = migrate(legacy)
@@ -50,6 +65,7 @@ describe('migrations', () => {
     expect(migrated.saveVersion).toBe(SAVE_VERSION)
     expect(migrated.player.routine.length).toBeGreaterThan(0)
     expect(migrated.player.blocksUsedToday).toBe(0)
+    expect(migrated.player.overdueBills).toBe(0)
     expect(migrated.meta.startArchetype).toBe('comum')
   })
 

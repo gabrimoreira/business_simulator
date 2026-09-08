@@ -41,6 +41,20 @@ export const MIGRATIONS: Record<number, Migration> = {
     save.saveVersion = 1
     return save
   },
+
+  /**
+   * 1 → 2: a Fase 1 trouxe contas de casa e refeições com teto diário. Sem
+   * banco até a Fase 2, a conta vencida precisa de um lugar para ficar
+   * (`overdueBills`), e `mealsToday` limita o quanto se come por dia.
+   */
+  1: (save) => {
+    const player = (save.player ?? {}) as RawSave
+    if (typeof player.overdueBills !== 'number') player.overdueBills = 0
+    if (typeof player.mealsToday !== 'number') player.mealsToday = 0
+    save.player = player
+    save.saveVersion = 2
+    return save
+  },
 }
 
 export class SaveTooNewError extends Error {

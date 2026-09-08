@@ -48,8 +48,10 @@ function initialPlayer(name: string): Player {
     publicReputation: INITIAL_PLAYER.publicReputation,
     notoriety: INITIAL_PLAYER.notoriety,
     blocksUsedToday: 0,
-    routine: ['trabalhar', 'trabalhar', 'lazer'],
+    mealsToday: 0,
+    routine: ['trabalhar', 'lazer', 'trabalhar'],
     contacts: 0,
+    overdueBills: 0,
     office: null,
     incarceratedDays: 0,
   }

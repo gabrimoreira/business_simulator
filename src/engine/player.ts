@@ -1,0 +1,307 @@
+/**
+ * Passo 10 do tick e as regras derivadas do jogador. TypeScript puro.
+ * Todos os números vêm de `src/data/` (CLAUDE.md §5).
+ */
+import type { GameState, LogEntry, Skills } from './types'
+import type { DayMarkers } from './clock'
+import { CAREER, VITALS } from '../data/config'
+import { MONTHLY_BILLS } from '../data/living'
+import { findJob } from '../data/jobs'
+
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+const clampVital = (value: number): number => clamp(value, 0, VITALS.max)
+
+/**
+ * Penalidade multiplicativa de humor baixo sobre produtividade e qualidade de
+ * decisão (spec §5.1). Usada pelo trabalho e, a partir da Fase 5, pela gestão.
+ */
+export function moodMultiplier(mood: number): number {
+  if (mood < VITALS.veryLowMoodThreshold) return VITALS.veryLowMoodMultiplier
+  if (mood < VITALS.lowMoodThreshold) return VITALS.lowMoodMultiplier
+  return 1
+}
+
+/** Recuperação do sono na virada do dia — automática, não consome bloco (C3). */
+export function sleepRecovery(state: GameState): number {
+  const { health, mood, hunger } = state.player
+  const healthFactor = 0.6 + 0.4 * (health / VITALS.max)
+  const moodFactor = 0.8 + 0.2 * (mood / VITALS.max)
+  const base = VITALS.sleepBase * healthFactor * moodFactor
+  const penalty = hunger < VITALS.lowHungerThreshold ? VITALS.lowHungerSleepPenalty : 0
+  return Math.max(0, base - penalty)
+}
+
+export function skillValue(skills: Skills, key: keyof Skills): number {
+  return skills[key]
+}
+
+/** Salário do mês corrente, já com o reajuste acumulado. */
+function payday(draft: GameState, log: LogEntry[]): void {
+  const { player } = draft
+  if (!player.currentJobId) return
+  const salary = player.career.salary
+  if (salary <= 0) return
+  player.money += salary
+  log.push({
+    id: `pay-${draft.date.dayIndex}`,
+    dayIndex: draft.date.dayIndex,
+    severity: 'bom',
+    source: 'player',
+    text: 'Salário creditado.',
+    amount: salary,
+  })
+  settleOverdue(draft, log)
+}
+
+/** Quita o que estiver atrasado assim que entra dinheiro. */
+function settleOverdue(draft: GameState, log: LogEntry[]): void {
+  const { player } = draft
+  if (player.overdueBills <= 0 || player.money <= 0) return
+  const paid = Math.min(player.overdueBills, player.money)
+  player.money -= paid
+  player.overdueBills -= paid
+  log.push({
+    id: `overdue-pay-${draft.date.dayIndex}`,
+    dayIndex: draft.date.dayIndex,
+    severity: 'info',
+    source: 'player',
+    text: 'Contas atrasadas quitadas.',
+    amount: -paid,
+  })
+}
+
+function billsDay(draft: GameState, log: LogEntry[]): void {
+  const { player, personalAssets } = draft
+  const total = personalAssets.monthlyRent + MONTHLY_BILLS.transport + MONTHLY_BILLS.health
+  const paid = Math.min(total, player.money)
+  player.money -= paid
+  const unpaid = total - paid
+  if (unpaid > 0) {
+    player.overdueBills += unpaid
+    log.push({
+      id: `bills-${draft.date.dayIndex}`,
+      dayIndex: draft.date.dayIndex,
+      severity: 'ruim',
+      source: 'player',
+      text: 'Não deu para pagar todas as contas do mês.',
+      amount: -paid,
+    })
+  } else {
+    log.push({
+      id: `bills-${draft.date.dayIndex}`,
+      dayIndex: draft.date.dayIndex,
+      severity: 'info',
+      source: 'player',
+      text: 'Contas do mês pagas.',
+      amount: -paid,
+    })
+  }
+}
+
+/** Reajuste anual do salário pela inflação (spec §5.1). */
+function adjustSalary(draft: GameState, log: LogEntry[]): void {
+  const { player } = draft
+  if (!player.currentJobId || player.career.salary <= 0) return
+  const before = player.career.salary
+  player.career.salary = before * (1 + draft.macro.inflation)
+  player.career.daysSinceLastRaise = 0
+  log.push({
+    id: `raise-${draft.date.dayIndex}`,
+    dayIndex: draft.date.dayIndex,
+    severity: 'info',
+    source: 'player',
+    text: 'Salário reajustado pela inflação.',
+    amount: player.career.salary - before,
+  })
+}
+
+/**
+ * Passo 10: sono, decaimento, dinheiro do mês, envelhecimento e fim de jogo.
+ * Roda depois que a data já avançou (passo 1).
+ */
+export function stepPlayer(draft: GameState, markers: DayMarkers, log: LogEntry[]): void {
+  const { player } = draft
+
+  // Sono: acontece antes do decaimento porque é a virada da noite anterior.
+  player.energy = clampVital(player.energy + sleepRecovery(draft))
+
+  player.hunger = clampVital(player.hunger - VITALS.hungerDecayPerDay)
+  player.mood = clampVital(player.mood - VITALS.moodDecayPerDay)
+
+  if (player.hunger <= 0) {
+    player.health = clampVital(player.health - VITALS.starvingHealthDrain)
+  }
+  if (player.mood < VITALS.veryLowMoodThreshold) {
+    player.health = clampVital(player.health - VITALS.lowMoodHealthDrain)
+  }
+  if (player.age >= VITALS.agingStartsAtAge) {
+    player.health = clampVital(player.health - VITALS.agingHealthDrainPerDay)
+  }
+  if (
+    player.hunger > VITALS.healthRecoveryMinHunger &&
+    player.energy > VITALS.healthRecoveryMinEnergy
+  ) {
+    player.health = clampVital(player.health + VITALS.healthRecoveryPerDay)
+  }
+  if (player.overdueBills > 0) {
+    player.mood = clampVital(player.mood - VITALS.overdueMoodDrainPerDay)
+    player.creditScore = clamp(player.creditScore - VITALS.overdueScoreDrainPerDay, 0, 1000)
+  }
+
+  if (player.currentJobId) {
+    player.career.daysInJob += 1
+    player.career.daysSinceLastRaise += 1
+    // Desempenho decai todo dia; trabalhar repõe com folga. Sem isso, quem foi
+    // promovido uma vez ficaria elegível para sempre sem aparecer no serviço.
+    player.career.performance = clamp(
+      player.career.performance - CAREER.performanceDecayPerIdleDay,
+      0,
+      100,
+    )
+  }
+  if (player.incarceratedDays > 0) player.incarceratedDays -= 1
+
+  if (markers.isPayday) payday(draft, log)
+  if (markers.isBillsDay && draft.date.dayIndex >= CAREER.firstBillsGraceDays) {
+    billsDay(draft, log)
+  }
+  if (markers.isYearStart) adjustSalary(draft, log)
+
+  if (markers.isBirthday) {
+    log.push({
+      id: `birthday-${draft.date.dayIndex}`,
+      dayIndex: draft.date.dayIndex,
+      severity: 'info',
+      source: 'player',
+      text: `Você fez ${player.age} anos.`,
+      amount: null,
+    })
+  }
+
+  checkEnding(draft, log)
+}
+
+function checkEnding(draft: GameState, log: LogEntry[]): void {
+  const { player, meta } = draft
+  if (meta.ending) return
+
+  if (player.health <= 0) {
+    meta.ending = 'morte'
+    log.push({
+      id: `end-${draft.date.dayIndex}`,
+      dayIndex: draft.date.dayIndex,
+      severity: 'critico',
+      source: 'player',
+      text: 'Sua saúde chegou a zero.',
+      amount: null,
+    })
+    return
+  }
+
+  if (player.age >= 65) {
+    meta.ending = 'aposentadoria'
+    log.push({
+      id: `end-${draft.date.dayIndex}`,
+      dayIndex: draft.date.dayIndex,
+      severity: 'info',
+      source: 'player',
+      text: 'Você chegou aos 65 anos.',
+      amount: null,
+    })
+  }
+}
+
+/** Energia gasta ao trabalhar, ajustada pelo desgaste do cargo. */
+export function workEnergyCost(state: GameState, baseCost: number): number {
+  const job = state.player.currentJobId ? findJob(state.player.currentJobId) : null
+  if (!job) return baseCost
+  const multipliers = { baixo: 0.85, medio: 1, alto: 1.15 } as const
+  return baseCost * multipliers[job.wear]
+}
+
+/** Ganho de desempenho de um dia de trabalho, penalizado por exaustão e humor. */
+export function performanceGain(state: GameState): number {
+  const tired = state.player.energy < CAREER.lowEnergyThreshold
+  const base = CAREER.performanceGainPerWork * moodMultiplier(state.player.mood)
+  return tired ? base * CAREER.lowEnergyPerformancePenalty : base
+}
+
+export interface Eligibility {
+  ok: boolean
+  /** Motivos legíveis do porquê não pode — a UI lista, a ação recusa. */
+  missing: string[]
+}
+
+/**
+ * Requisitos de uma vaga (spec §5.1). Consumido pela ação `candidatar` e pela
+ * lista de vagas do Perfil — os dois precisam da mesma resposta, sempre.
+ */
+export function jobEligibility(state: GameState, jobId: string): Eligibility {
+  const job = findJob(jobId)
+  if (!job) return { ok: false, missing: ['Vaga inexistente.'] }
+
+  const { player } = state
+  const missing: string[] = []
+
+  const labels: Record<keyof Skills, string> = {
+    intelligence: 'Inteligência',
+    charisma: 'Carisma',
+    technical: 'Técnica',
+    fitness: 'Preparo físico',
+  }
+  for (const [key, required] of Object.entries(job.requirements.skills) as Array<
+    [keyof Skills, number]
+  >) {
+    if (player.skills[key] < required) {
+      missing.push(`${labels[key]} ${Math.floor(player.skills[key])}/${required}`)
+    }
+  }
+
+  for (const courseId of job.requirements.education) {
+    if (!player.education.includes(courseId)) missing.push(`Formação: ${courseId}`)
+  }
+
+  if (job.requirements.minDaysInPreviousJob > 0) {
+    if (!player.currentJobId) {
+      missing.push('Exige experiência no cargo anterior')
+    } else if (player.career.daysInJob < job.requirements.minDaysInPreviousJob) {
+      missing.push(
+        `Tempo no cargo ${player.career.daysInJob}/${job.requirements.minDaysInPreviousJob} dias`,
+      )
+    } else if (player.career.performance < CAREER.minPerformanceForPromotion) {
+      missing.push(
+        `Desempenho ${Math.floor(player.career.performance)}/${CAREER.minPerformanceForPromotion}`,
+      )
+    }
+  }
+
+  return { ok: missing.length === 0, missing }
+}
+
+/**
+ * Probabilidade de ser contratado, dada a folga sobre o mínimo exigido.
+ * Requisito atendido não garante a vaga — é o que dá peso a carisma e reputação.
+ */
+export function hireChance(state: GameState, jobId: string): number {
+  const job = findJob(jobId)
+  if (!job) return 0
+  const { player } = state
+
+  let margin = 0
+  for (const [key, required] of Object.entries(job.requirements.skills) as Array<
+    [keyof Skills, number]
+  >) {
+    margin += player.skills[key] - required
+  }
+
+  const chance =
+    CAREER.hireBaseChance +
+    margin * CAREER.hireSkillMarginWeight +
+    player.skills.charisma * CAREER.hireCharismaWeight +
+    player.publicReputation * CAREER.hireReputationWeight
+
+  return clamp(chance, 0.02, CAREER.hireMaxChance)
+}

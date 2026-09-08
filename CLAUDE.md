@@ -41,6 +41,16 @@ worldTick(state: GameState, days: number): { state: GameState; log: DayLog[] }
 Puras e determinísticas: mesma seed + mesma sequência de ações = estado
 deep-equal, sempre. Mutação via Immer (`produce`), nunca in-place no argumento.
 
+**Ação inválida não lança**: devolve o estado intacto e um `LogEntry` com o
+motivo. Quem chama trata os dois casos igual.
+
+**`avancarTempo` é a exceção do vocabulário de ações**: está na união
+`GameAction` porque jogador e NPC compartilham um vocabulário só, mas não é
+tratada por `applyAction` — que, por contrato, não avança o tempo. Ela é roteada
+para `runDays` em `src/engine/autoplay.ts`, o mesmo caminho usado pelo botão de
+avançar tempo, pelo catch-up offline e pelo runner headless. Se existirem dois
+laços de dia diferentes, a UI e o `sim` passam a medir jogos diferentes.
+
 **Iteração estável:** nunca itere `Object.keys` / `Map` sem ordenar por id.
 Ordem de iteração afeta consumo do RNG e, portanto, o determinismo.
 

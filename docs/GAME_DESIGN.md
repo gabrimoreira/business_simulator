@@ -226,6 +226,15 @@ estratégia com risco de **perda catastrófica**: investigação com condenaçã
 bloqueia bens e custa meses de ações. O topo é limitado por antitruste e por
 2–3 tycoons rivais competindo pelos mesmos alvos.
 
+> **Medido na Fase 1** (nominal, sem bolsa nem juros, que só chegam nas Fases 2
+> e 3): `passive` termina 10 anos com R$ 229 mil e 30 anos com R$ 1,57 M, preso
+> em Encarregado de loja — exatamente o teto sem diploma previsto aqui.
+> `investor` fica **atrás** aos 10 anos (R$ 43 mil, porque pagou R$ 30 mil de
+> matrícula e só então chegou a Analista júnior) e passa à frente por volta do
+> **ano 14**: R$ 1,84 M aos 20 anos e R$ 5,0 M aos 30. A inversão nos primeiros
+> 10 anos é esperada enquanto não existe onde compor capital; se persistir
+> depois da Fase 3, o critério de reprovação abaixo vale.
+
 ### 2.3 Critérios de reprovação do balanceamento
 
 O runner headless reprova a build se qualquer um ocorrer:
@@ -302,7 +311,7 @@ tempo mínimo no cargo + skill + desempenho acumulado.
 
 | # | Cargo | Salário | Requisitos | Desgaste |
 |---|---|---|---|---|
-| 0 | Atendente de balcão | 1.600 | — | alto |
+| 0 | Atendente de balcão | 1.800 | — | alto |
 | 1 | Auxiliar administrativo | 2.400 | int 20 | médio |
 | 2 | Encarregado de loja | 3.400 | car 30, 2 anos | alto |
 | 3 | Técnico de suporte | 4.800 | tec 35, curso técnico | médio |
@@ -330,7 +339,7 @@ Cargos 0–2 não exigem diploma — é o teto do `passive`.
 
 | Item | Valor/mês (R$ do ano 0) |
 |---|---|
-| Quarto alugado | 700 |
+| Quarto compartilhado (moradia inicial) | 550 |
 | Apartamento alugado | 1.800 |
 | Transporte | 260 |
 | Alimentação (1 refeição normal/dia) | 600 |
@@ -554,10 +563,13 @@ jogador morre ou fica preso sem nunca conseguir estudar (é por isso que C3 tiro
 comer e dormir dos blocos).
 *Sintoma:* `passive` com saúde média abaixo de 50 no primeiro ano, ou zero
 cursos concluídos em 10 anos.
-*Alavanca:* salário do cargo 0 (R$ 1.600) contra custo de vida mínimo
-(R$ 1.380/mês: quarto 700 + transporte 260 + marmita 240 + saúde 180) — a
-margem hoje é de R$ 220/mês, apertada de
-propósito, mas é o primeiro número que vou querer olhar no runner.
+*Medido na Fase 1 (e corrigido):* a primeira versão matava o jogador no **dia
+34**, e depois no dia 49. Quatro causas somadas: começar com R$ 0 (não dá para
+comer no primeiro dia); cobrar aluguel no dia 10 do primeiro mês, antes do
+primeiro salário; marmita tirando saúde, o que fazia da única comida acessível
+uma morte lenta; e **nada no jogo devolvendo saúde**, o que transformava um
+episódio de fome em sentença. Ajustes no §7. Com eles o primeiro ano fecha em
+**+R$ 1.700** e a saúde média fica em 99,3.
 
 **9. Capacidade produtiva como único freio da empresa nova.** Como o mercado
 setorial é da ordem de bilhões e `receita = min(demanda, capacidade)`, a curva
@@ -602,3 +614,31 @@ Aprovado isto, a Fase 0 entrega: scaffolding Vite + Vue 3 + TS strict + Tailwind
 `types.ts` com o `GameState` **final completo** (todos os sistemas, mesmo os das
 fases 6–8), save vazio versionado em IndexedDB, e shell PWA com bottom nav de 5
 abas instalável e funcionando offline.
+
+
+---
+
+## 7. Ajustes de balanceamento aplicados na Fase 1
+
+Registrados aqui porque contrariam números que este documento propunha antes de
+existir engine para medi-los. Todos vieram do runner headless.
+
+| Constante | Antes | Depois | Por quê |
+|---|---|---|---|
+| Salário do cargo 0 | R$ 1.600 | R$ 1.800 | com 1.600 o excedente mensal era negativo comendo refeição normal |
+| Aluguel inicial | R$ 700 | R$ 550 | quarto compartilhado; era o maior item do orçamento de quem ganha o piso |
+| Dinheiro inicial | R$ 0 | R$ 600 | com zero o jogador não come no primeiro dia e morre antes do primeiro salário |
+| Primeira conta | dia 10 do mês 1 | carência de 30 dias | contratado no dia 3, só recebe no dia 5 do mês seguinte: o buraco era intransponível |
+| Marmita | −1 de saúde | −1 de humor | a comida de quem está quebrado não pode ser veneno |
+| Decaimento de humor | 2/dia | 3/dia | com 2 e lazer diário o humor ficava colado em 100 |
+| Lazer | +12 de humor | +8 | idem |
+| Trabalhar | sem efeito de humor | −1,5 de humor | sem custo, o trabalho não competia com nada |
+| Recuperação de saúde | não existia | +0,3/dia alimentado e descansado | sem ela, um episódio de fome era irreversível |
+
+**Consequência de design que apareceu na medição:** como o salário é mensal,
+trabalhar dois blocos no mesmo dia não rende nada além de desempenho para
+promoção. O terceiro bloco vale mais em socializar (carisma → Encarregado) ou
+estudar. Isso é temático — o jogo é sobre capital, não sobre esforço — mas
+significa que `horaExtra` é hoje a **única** forma de converter bloco em
+dinheiro. Se a Fase 2 mostrar que ninguém usa os três blocos, o caminho é dar
+efeito de renda ao desempenho, não encarecer o descanso.

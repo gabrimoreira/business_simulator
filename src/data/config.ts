@@ -7,7 +7,7 @@
  */
 
 /** Versão do formato de save. Incrementar exige uma migration (§3.5). */
-export const SAVE_VERSION = 1
+export const SAVE_VERSION = 2
 
 // --- Tempo (GAME_DESIGN §3.1) ----------------------------------------------
 
@@ -34,7 +34,12 @@ export const START_YEAR = 2025
 // --- Jogador inicial -------------------------------------------------------
 
 export const INITIAL_PLAYER = {
-  money: 0,
+  /**
+   * Reserva inicial. O spec §1 diz "começa sem dinheiro", e R$ 400 é
+   * praticamente isso — mas com zero absoluto o jogador não consegue comer no
+   * primeiro dia e morre antes do primeiro salário. Medido no runner.
+   */
+  money: 600,
   energy: 100,
   health: 100,
   mood: 70,
@@ -45,8 +50,11 @@ export const INITIAL_PLAYER = {
   notoriety: 0,
 } as const
 
-/** Aluguel do quarto padrão, em BRL do ano 0 (GAME_DESIGN §3.5). */
-export const DEFAULT_MONTHLY_RENT = 700
+/**
+ * Aluguel do quarto padrão (GAME_DESIGN §3.5). Quarto compartilhado, não quarto
+ * inteiro: com 700 o orçamento do primeiro ano não fecha nem comendo marmita.
+ */
+export const DEFAULT_MONTHLY_RENT = 550
 
 // --- Macro inicial (GAME_DESIGN §3.6) --------------------------------------
 
@@ -77,3 +85,87 @@ export const HEADLINE_WINDOW_SIZE = 120
 
 /** Debounce do autosave, em ms (spec §3.5). */
 export const AUTOSAVE_DEBOUNCE_MS = 500
+
+// --- Vitais e decaimento (GAME_DESIGN §3.2) --------------------------------
+
+export const VITALS = {
+  max: 100,
+  /** Fome cai 50/dia: uma refeição normal (+50) cobre exatamente um dia. */
+  hungerDecayPerDay: 50,
+  moodDecayPerDay: 3,
+  /** Fome zerada drena saúde. */
+  starvingHealthDrain: 3,
+  /** Abaixo disso o sono não restaura direito. */
+  lowHungerThreshold: 30,
+  lowHungerSleepPenalty: 20,
+  /** Base do sono automático na virada do dia (resolução C3). */
+  sleepBase: 65,
+  /** Humor baixo penaliza produtividade e decisão de gestão. */
+  lowMoodThreshold: 30,
+  lowMoodMultiplier: 0.75,
+  veryLowMoodThreshold: 10,
+  veryLowMoodMultiplier: 0.5,
+  lowMoodHealthDrain: 0.5,
+  /** Envelhecimento: saúde decai devagar a partir daqui. */
+  agingStartsAtAge: 50,
+  agingHealthDrainPerDay: 0.02,
+  /** Contas atrasadas corroem humor e score todo dia. */
+  overdueMoodDrainPerDay: 0.3,
+  overdueScoreDrainPerDay: 1,
+  /**
+   * Recuperação natural de saúde de quem está alimentado e descansado. Sem ela
+   * um único episódio de fome vira sentença de morte: nada mais no jogo devolve
+   * saúde, e o runner morria no dia 49 por dívida acumulada de saúde.
+   */
+  healthRecoveryPerDay: 0.3,
+  healthRecoveryMinHunger: 20,
+  healthRecoveryMinEnergy: 30,
+} as const
+
+/** Custo e efeito de cada bloco de ação (GAME_DESIGN §3.2). */
+export const ACTION_COSTS = {
+  // Trabalhar desgasta o humor: sem isso o lazer diário vira fonte infinita de
+  // humor e o sistema perde qualquer tensão.
+  trabalhar: { blocks: 1, energy: 30, moodDelta: -1.5 },
+  horaExtra: { blocks: 1, energy: 35, moodDelta: -4, payMultiplier: 1.6 },
+  estudar: { blocks: 1, energy: 20, intelligenceGain: 0.02 },
+  academia: { blocks: 1, energy: 25, fitnessGain: 0.4, healthGain: 0.3 },
+  lazer: { blocks: 1, energy: 10, moodGain: 8 },
+  socializar: { blocks: 1, energy: 15, charismaGain: 0.2, contacts: 1 },
+} as const
+
+// --- Carreira (GAME_DESIGN §3.3) -------------------------------------------
+
+export const CAREER = {
+  /** Dia do mês em que o salário cai. */
+  paydayDay: 5,
+  /** Dia do mês em que as contas são debitadas. */
+  billsDay: 10,
+  /**
+   * Carência do primeiro mês. Quem começa aos 18 com R$ 600 e é contratado no
+   * dia 3 só recebe no dia 5 do mês seguinte — cobrar aluguel no dia 10 do
+   * primeiro mês abre um buraco do qual não se sai, e o runner morria por isso.
+   */
+  firstBillsGraceDays: 30,
+  performanceGainPerWork: 0.35,
+  performanceDecayPerIdleDay: 0.05,
+  /** Trabalhar exausto rende menos desempenho. */
+  lowEnergyThreshold: 40,
+  lowEnergyPerformancePenalty: 0.5,
+  minPerformanceForPromotion: 60,
+  /** Chance de ser contratado: base + folga de skill + carisma + reputação. */
+  hireBaseChance: 0.35,
+  hireSkillMarginWeight: 0.01,
+  hireCharismaWeight: 0.004,
+  hireReputationWeight: 0.002,
+  hireMaxChance: 0.95,
+} as const
+
+/** Auto-alimentação do avanço rápido: come quando a fome cai abaixo disto. */
+export const AUTOPLAY_HUNGER_THRESHOLD = 50
+
+/** E escolhe a refeição mais barata que leve a fome até aqui. */
+export const AUTOPLAY_TARGET_HUNGER = 80
+
+/** Teto de refeições por dia. */
+export const MEALS_PER_DAY = 3
