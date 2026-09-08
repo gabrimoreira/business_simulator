@@ -8,3 +8,6 @@ coverage/
 .DS_Store
 .vite/
 sim-output/
+
+# artefatos de verificação do navegador
+.playwright-mcp/

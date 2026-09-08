@@ -1,0 +1,72 @@
+@import 'tailwindcss';
+
+/* Tema. Escuro por padrão (spec §6) — o acento verde-esmeralda também é a cor de
+   alta no gráfico, então a queda ganha um rosa frio para não competir. */
+@theme {
+  --color-bg: #0a0a0b;
+  --color-surface: #14141a;
+  --color-surface-2: #1c1c24;
+  --color-line: #26262f;
+  --color-text: #f4f4f5;
+  --color-muted: #8b8b96;
+  --color-accent: #10b981;
+  --color-accent-dim: #065f46;
+  --color-up: #10b981;
+  --color-down: #f43f5e;
+  --color-warn: #f59e0b;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --spacing-safe-b: env(safe-area-inset-bottom, 0px);
+  --spacing-safe-t: env(safe-area-inset-top, 0px);
+}
+
+@layer base {
+  html {
+    background-color: var(--color-bg);
+    color-scheme: dark;
+    /* Mata o double-tap zoom sem desabilitar o scroll (spec §6). */
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    /* Mata o pull-to-refresh e o bounce do iOS. */
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    /* Seleção acidental de texto em UI de toque. */
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Só onde ler e copiar faz sentido. */
+  .selectable {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  /* Números de dinheiro sempre alinhados. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
