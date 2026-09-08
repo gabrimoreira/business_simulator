@@ -1,0 +1,604 @@
+# GAME_DESIGN.md — Balanceamento e decisões de design
+
+> Documento exigido pelo §10.1 do spec, **antes de qualquer código**.
+> Contém: resoluções de conflito do spec, curva de progressão econômica, tabela
+> de constantes iniciais, e onde eu acho que isto vai desbalancear.
+> Nada aqui é código; tudo aqui vira `src/data/` nas fases seguintes.
+
+**Convenção de valores:** todos os alvos de patrimônio estão em **R$ constantes
+do ano 0** (reais, deflacionados). Em valores nominais, com inflação de 4,5% ao
+ano ao longo de 47 anos, tudo se multiplica por ~8× — o que faria qualquer meta
+nominal mentir. O jogo mostra nominal na tela (é o que o jogador tem no bolso) e
+o runner de balanceamento reporta as duas colunas.
+
+---
+
+## 1. Conflitos do spec e como foram resolvidos
+
+O §10.5 manda parar e perguntar em caso de conflito. Estes são todos os que
+encontrei na leitura completa. C1 e C2 foram decididos por você; C3 a C13 são
+defaults documentados — cada um pode ser revertido antes da Fase 0.
+
+### C1 — Escala de tempo vs partida completa dos 18 aos 65 *(decidido)*
+
+§3.4 fixa 1 dia de jogo = 4 min reais. §5.11 e a Fase 8 pedem partida completa
+dos 18 aos 65: 47 anos × 365 dias × 4 min ≈ **1.150 horas reais**.
+
+**Resolução:** mantém 4 min/dia como cadência *idle* (com o teto de 3 dias de
+progresso offline do spec) e adiciona ação explícita de **avanço de tempo**
+(semana ou mês), que executa os blocos segundo uma **rotina** definida pelo
+jogador e devolve log resumido no mesmo formato do modal "Enquanto você esteve
+fora". Sessão ativa e idle passam a ser escolha, não obrigação. Partida completa
+cai para ~20–40 h de jogo real.
+
+*Consequência de implementação:* a rotina é estado do jogador
+(`player.routine: ActionKind[]`) e o avanço de tempo é uma `GameAction` como
+qualquer outra — nenhum caminho de código novo, mesmo `worldTick`.
+
+### C2 — 3 blocos/dia vs dez empresas no late game *(decidido)*
+
+§5.1 cobra 1 bloco por empresa gerida; o late game pede dez empresas. O spec só
+resolve isso na Fase 6b (nomear CEO), deixando as Fases 5–6 travadas.
+
+**Resolução:** gestão de empresa é **diretriz persistente**. A empresa opera
+sozinha com as diretrizes vigentes (preço, orçamento de marketing, % de P&D,
+política de contratação, payout). O bloco é cobrado apenas ao **alterar** uma
+diretriz ou em jogada pontual (empréstimo, IPO, demissão em massa, M&A).
+A nomeação de CEO da Fase 6b passa a significar "quem define as diretrizes no
+seu lugar" — o mesmo motor de utilidade da IA operando *a seu favor*.
+
+*Consequência de gameplay:* delegar deixa de ser alívio de tédio e passa a ser
+troca real — o CEO nomeado tem `hardRules` próprias e vai recusar jogadas que
+você faria.
+
+### C3 — O orçamento diário não fecha se comer e dormir custarem bloco
+
+§5.1 lista dormir e comer entre as ações. Com 3 blocos: trabalhar + comer +
+dormir = 3 blocos, e o jogador **nunca estuda** — a progressão de carreira, que
+exige diploma, fica inalcançável.
+
+**Resolução:** comer é ação livre (0 blocos, máximo 3 refeições/dia) e dormir é
+automático na virada do dia (0 blocos), restaurando energia em função de saúde,
+humor, fome e qualidade da moradia. Consomem bloco: trabalhar, estudar,
+academia, lazer, socializar, alterar diretriz de empresa, hora extra.
+Operar na bolsa é grátis, como o spec manda.
+
+### C4 — A fórmula de demanda do §5.5 é circular
+
+`demandaPotencial` usa `participacaoRelativaVsConcorrentes`, mas a participação
+*é* consequência da receita. Não há como avaliar a expressão como escrita.
+
+**Resolução:** participação passa a ser derivada de atratividade relativa.
+
+```
+atratividade_i = 0.40*(qualidade_i/100)^0.9
+               + 0.35*(marca_i/100)^0.8
+               + 0.25*elasticidade_i
+   onde elasticidade_i = (precoMedioSetor / preco_i)^1.6
+
+share_i   = atratividade_i / Σ atratividade_setor
+demanda_i = tamanhoMercadoSetor * fatorCiclo(macro) * sazonalidade(setor, mês) * share_i
+receita_i = min(demanda_i, capacidade_i) * preco_i
+```
+
+Demanda não atendida por falta de capacidade é **redistribuída** aos
+concorrentes que têm capacidade sobrando, em proporção à atratividade deles.
+Isso satisfaz de graça o teste do §8 "participações somam 1 dentro de cada setor,
+todo tick", e dá sentido mecânico a expandir capacidade.
+
+### C5 — Custo de `simularTrimestre` vs "usar o mesmo `companies.ts`"
+
+§5.12 exige que a projeção da IA rode a engine real, não uma cópia. Projeção
+ingênua: 6 candidatos × 90 dias × 28 empresas. No runner de 3650 dias isso é
+ordem de milhões de company-days só de projeção.
+
+**Resolução:** `companies.ts` expõe duas funções sobre a *mesma* regra:
+`stepCompanyDay(company, ctx)` (o dia real) e `projectQuarter(company, action,
+publicView)`, que chama `stepCompanyDay` com **passo semanal (13 iterações)** e
+macro congelado. Mesma regra de negócio, custo 7× menor. Com reavaliação a cada
+90 dias e offset `hash(companyId) % 90`, isso dá ~0,31 empresa/dia × 6
+candidatos × 13 passos ≈ **24 company-steps/dia** de projeção contra 28 de
+simulação real — menos que dobrar o custo do tick.
+
+### C6 — IR de 15% "gera pendência se não houver caixa"
+
+§5.3 não diz o que a pendência faz depois, e o §8 exige teste de "cobrado
+exatamente uma vez".
+
+**Resolução:** apuração no último dia do mês sobre lucro realizado do mês, com
+isenção para vendas mensais até R$ 20.000 (regra brasileira, e dá textura ao
+early game). Sem caixa, vira `TaxDebt` com multa de 2% + 1% ao mês, bloqueia
+saque de aplicação enquanto existir, e custa −40 de `creditScore`. O lucro
+apurado é marcado como liquidado no mesmo passo em que a pendência é criada — é
+isso que torna o "exatamente uma vez" testável.
+
+### C7 — `lastTickAt: number` (epoch ms) vs engine sem `Date.now()`
+
+§3.4 põe um timestamp real dentro do estado; §3.1 proíbe o relógio na engine.
+
+**Resolução:** `lastTickAt` é **escrito** pela camada de UI/persistência e nunca
+**lido** pela lógica de simulação. A UI calcula `days` e chama
+`worldTick(state, days)`. A engine não sabe que horas são.
+
+### C8 — `rng.normal()` sem `Math.random()`
+
+**Resolução:** mulberry32 dá uniforme; a normal é Box-Muller consumindo **2
+draws** do counter. Esse contrato é congelado: mudar o número de draws por
+`normal()` desalinha o counter e invalida todo save existente.
+
+### C9 — Dois tipos diferentes de deslistagem
+
+§5.3 diz que na deslistagem "a posição do jogador zera"; §5.6 diz que com ≥90%
+o controlador pode fechar o capital. São eventos diferentes.
+
+**Resolução:** *falência/recuperação judicial* zera a posição (a empresa não
+vale nada). *Fechamento de capital* é compra compulsória dos minoritários com
+prêmio sobre a média dos últimos 60 dias — o jogador minoritário **recebe
+dinheiro**, e essa é justamente a jogada que um tycoon rival pode usar para te
+expulsar de uma posição que você queria manter.
+
+### C10 — Paridade de ações vs o Padrinho recebendo subsídio
+
+§5.12 Regra 1 proíbe efeito exclusivo de IA; o arquétipo Padrinho "recebe
+subsídio, contrato público e proteção tarifária".
+
+**Resolução:** subsídio, contrato e tarifa **só existem como `Policy`** aprovada
+pelo sistema de política (§5.7). O Padrinho consegue via doação e lobby, com o
+mesmo custo e a mesma incerteza que o jogador. Nada é creditado a NPC fora do
+sistema. É isso que faz "a fraqueza dele ser eleitoral, não financeira" ser
+verdade mecânica e não texto de sabor.
+
+### C11 — "Nenhum valor negativo inválido" vs empresa com caixa negativo
+
+**Resolução:** o teste do §8 precisa de uma lista explícita.
+*Podem ser negativos:* caixa de empresa, lucro, P&L, patrimônio líquido,
+`publicReputation` (−100 a 100), `MacroState.inflation`, retorno diário.
+*Nunca negativos:* preço de ação e de produto, `sharesOutstanding`, energia,
+saúde, humor, fome, skills, `creditScore`, `notoriety`, `credibility`,
+`principal` de empréstimo, quantidade de ações em carteira.
+
+### C12 — `PublicView` com `history: Candle[]` copiado todo tick
+
+Copiar 28 × 365 candles por dia é caro e desnecessário.
+
+**Resolução:** o `PublicView` carrega a **mesma referência** (congelada) do array
+de candles públicos, nunca uma cópia. Candles passados são imutáveis por
+construção — só se adiciona no fim. Determinismo preservado, custo zero.
+
+### C13 — Limiares de participação em empresa privada
+
+A tabela do §5.6 (5/15/25/50/90%) fala de conselho, divulgação e deslistagem —
+conceitos de companhia aberta.
+
+**Resolução:** os limiares valem só para `isPublic: true`. Empresa privada usa
+`ownership` direto: controle é >50%, e não há divulgação obrigatória (é
+exatamente por isso que abrir capital tem custo estratégico — §5.12 Regra 2).
+
+---
+
+## 2. Curva de progressão econômica
+
+As quatro estratégias do runner (§7), com a aritmética que sustenta cada número.
+Tudo em **R$ constantes do ano 0**. Jogador começa aos 18 com R$ 0 e sem
+qualificação; aposentadoria aos 65 (47 anos de jogo = 17.155 dias).
+
+### 2.1 Alvos
+
+| Estratégia | 1º milhão (real) | 1º milhão (nominal) | Patrimônio aos 65 (real) | Freio principal |
+|---|---|---|---|---|
+| `passive` — só trabalha | ano 36–42 | ~ano 24 | R$ 1,1–1,8 M | teto salarial sem diploma + eventos de vida |
+| `investor` — trabalha, estuda, investe | ano 15–19 | ~ano 11–13 | R$ 20–70 M | IR 15%, corretagem, drawdown de recessão |
+| `entrepreneur` — funda e opera | ano 8–11 | ~ano 6–8 | R$ 60–500 M | capital de expansão, moral, guerra de preços da IA |
+| `tycoon` — alavanca, adquire, manipula | ano 6–9 | ~ano 5–6 | R$ 1–15 B | antitruste, `notoriety`, tycoons rivais |
+
+### 2.2 De onde vêm esses números
+
+**`passive`.** Sem cursos, a carreira para em *Encarregado de loja*,
+R$ 3.400/mês. Excedente real médio de R$ 1.300/mês (R$ 700 no início,
+R$ 2.100 no fim), depositado em poupança a ~3,4% real. Somando os três
+patamares de renda com juros compostos: **R$ 1,4 M real** aos 65. Cruza
+R$ 1 M real por volta do ano 38. Em nominal cruza no ano ~24 — é por isso que o
+runner reporta as duas colunas: uma meta nominal mentiria por 14 anos.
+
+**`investor`.** Estuda e chega a Gerente (R$ 26.000/mês). Excedente real médio
+de R$ 6.500/mês, aplicado a 7% real (índice) + até 4% de alfa real para quem
+opera notícia e rumor bem. Três patamares de aporte compostos a 11% real dão
+**R$ 18–25 M real**, cruzando R$ 1 M real no ano ~17.
+
+> **Conclusão de design que sai daí:** investir sozinho é *lento*. Nenhum aporte
+> de assalariado vira império. O acelerador é fundar empresa, e é isso que faz o
+> jogo do spec ser sobre empreender e não sobre day trade. Se o runner mostrar
+> `investor` chegando perto de `entrepreneur`, o alfa está generoso demais.
+
+**`entrepreneur`.** Capital de fundação de R$ 50.000 sai por poupança no ano
+4–6, ou por empréstimo no ano 3 (com juros punitivos e score baixo). O freio
+real do early game é **capacidade produtiva**, não demanda: o setor tem mercado
+de bilhões, mas `receita = min(demanda, capacidade)` e a capacidade inicial é de
+um funcionário — teto de ~R$ 25.000/mês de receita. Reinvestindo lucro em
+capacidade, a receita compõe 40–70% ao ano até a participação de mercado passar
+a morder. Empresa com R$ 1,2 M de receita anual e margem de 11% dá R$ 130 mil de
+lucro, que a 8× de múltiplo setorial vale R$ 1,04 M — daí o 1º milhão no ano
+8–11. O topo (R$ 60–500 M) depende de IPO e de aquisições.
+
+**`tycoon`.** Mesmo início do `entrepreneur`, mais alavancagem, compra de jornal
+e financiamento de político. Chega antes e vai muito mais longe, mas é a única
+estratégia com risco de **perda catastrófica**: investigação com condenação
+bloqueia bens e custa meses de ações. O topo é limitado por antitruste e por
+2–3 tycoons rivais competindo pelos mesmos alvos.
+
+### 2.3 Critérios de reprovação do balanceamento
+
+O runner headless reprova a build se qualquer um ocorrer:
+
+- **Patrimônio explosivo:** patrimônio real acima de 20% do valor de mercado
+  agregado do jogo. Pelas tabelas do §3.7 o mercado nasce com R$ 186 B de
+  receita setorial somada, ~R$ 21 B de lucro líquido agregado e múltiplo médio de
+  ~10× — ou seja **~R$ 210 B de valor de mercado**, e teto de patrimônio real em
+  R$ 42 B. Reprova também CAGR real acima de 60% sustentado por 5 anos.
+- **Jogador travado:** qualquer estratégia terminando com saúde < 20 de forma
+  recorrente, fome zerada mais de 30 dias no total, ou patrimônio real negativo
+  por mais de 2 anos sem caminho de saída.
+- **Estratégia dominada:** `passive` superando `investor`, ou `investor`
+  superando `entrepreneur`, ao final de 10 anos. A ordem das quatro curvas é o
+  invariante de balanceamento mais importante do jogo.
+- **Convergência de setor:** qualquer setor terminando com um único preço
+  praticado (desvio-padrão de preço < 3% da média) ou com monopólio permanente
+  (share > 70% por mais de 8 trimestres).
+- **Oscilação sustentada:** variação de preço de um NPC alternando de sinal mais
+  de 4 vezes em 8 decisões consecutivas.
+- **Guerra de preços eterna:** `pricewar` não convergindo em 6 trimestres.
+
+---
+
+## 3. Tabela de constantes iniciais
+
+Conteúdo futuro de `src/data/`. Nenhum destes números aparece na lógica.
+
+### 3.1 Tempo e ação — `config.ts`
+
+| Constante | Valor | Por quê |
+|---|---|---|
+| `MS_PER_GAME_DAY` | 240.000 (4 min) | vem do spec §3.4 |
+| `OFFLINE_CAP_DAYS` | 3 | teto do spec §3.4 |
+| `ACTION_BLOCKS_PER_DAY` | 3 | spec §5.1 |
+| `FAST_FORWARD_STEPS` | 7 e 30 dias | resolução C1 |
+| `RETIREMENT_AGE` | 65 | spec §5.11 |
+| `START_AGE` | 18 | spec §5.1 |
+| `TICKS_PER_YEAR` | 365 | calendário real, trimestres em mar/jun/set/dez |
+
+### 3.2 Energia, saúde, humor, fome
+
+| Ação | Blocos | Energia | Efeito |
+|---|---|---|---|
+| Dormir (automático na virada) | 0 | +65 × modificadores | — |
+| Comer marmita (R$ 8) | 0 | +2 | fome +30, saúde −1 |
+| Comer normal (R$ 20) | 0 | +5 | fome +50 |
+| Restaurante (R$ 60) | 0 | +5 | fome +60, humor +8 |
+| Trabalhar | 1 | −30 | salário, desempenho |
+| Hora extra | 1 | −35 | +60% do salário-dia, humor −4 |
+| Estudar | 1 | −20 | progresso no curso |
+| Academia | 1 | −25 | fitness +0,4, saúde +0,3 |
+| Lazer | 1 | −10 | humor +12 |
+| Socializar | 1 | −15 | carisma +0,2, +1 contato |
+| Alterar diretriz de empresa | 1 | −15 | ver C2 |
+| Operar na bolsa | 0 | 0 | spec §5.1 |
+
+- Decaimento diário: fome −50, humor −2, energia só via ações.
+- `energia = 0` bloqueia ações que consomem bloco. `saúde = 0` é fim de jogo.
+- `fome = 0` drena 3 de saúde por dia.
+- Humor < 30 aplica multiplicador de 0,75 em produtividade e em qualidade de
+  decisão de gestão; humor < 10, multiplicador 0,5.
+- Recuperação do sono: `+65 × (0,6 + 0,4·saúdeNorm) × (0,8 + 0,2·humorNorm) ×
+  fatorMoradia`, menos 20 se `fome < 30`.
+
+> Três blocos "caros" por dia custam ~75 de energia contra 65 de recuperação:
+> o déficit de 10/dia força um dia leve a cada 4–5 dias. Essa é a tensão do
+> early game, e é ela que faz academia e lazer valerem bloco.
+
+### 3.3 Carreira — `jobs.ts`
+
+Salários mensais em R$ do ano 0, reajustados pela inflação. Promoção exige
+tempo mínimo no cargo + skill + desempenho acumulado.
+
+| # | Cargo | Salário | Requisitos | Desgaste |
+|---|---|---|---|---|
+| 0 | Atendente de balcão | 1.600 | — | alto |
+| 1 | Auxiliar administrativo | 2.400 | int 20 | médio |
+| 2 | Encarregado de loja | 3.400 | car 30, 2 anos | alto |
+| 3 | Técnico de suporte | 4.800 | tec 35, curso técnico | médio |
+| 4 | Analista júnior | 7.000 | int 45, graduação | médio |
+| 5 | Desenvolvedor | 11.000 | tec 55, graduação | médio |
+| 6 | Especialista sênior | 16.000 | int 65, 2 anos no cargo 4 ou 5 | baixo |
+| 7 | Gerente | 26.000 | car 60, int 60, 2 anos | alto |
+| 8 | Diretor | 55.000 | car 75, int 70, MBA | alto |
+| 9 | C-level | 120.000 | car 85, int 80, MBA, 3 anos como diretor | alto |
+
+Cargos 0–2 não exigem diploma — é o teto do `passive`.
+
+### 3.4 Cursos — `courses.ts`
+
+| Curso | Duração | Custo | Concede |
+|---|---|---|---|
+| Curso técnico | 240 dias de estudo | R$ 2.400 | tec +15 |
+| Graduação | 1.100 dias | R$ 28.000 | int +20, tec +8 |
+| Pós / especialização | 500 dias | R$ 18.000 | int +12 |
+| MBA | 700 dias | R$ 90.000 | car +18, int +10 |
+| Oratória | 90 dias | R$ 1.500 | car +8 |
+| Mercado financeiro | 150 dias | R$ 3.500 | int +6, −20% corretagem |
+
+### 3.5 Custo de vida
+
+| Item | Valor/mês (R$ do ano 0) |
+|---|---|
+| Quarto alugado | 700 |
+| Apartamento alugado | 1.800 |
+| Transporte | 260 |
+| Alimentação (1 refeição normal/dia) | 600 |
+| Saúde e imprevistos | 180 |
+| **Eventos de vida** (doença, conserto, família) | ~15% do excedente, estocástico |
+
+### 3.6 Macroeconomia — `config.ts`
+
+| Constante | Valor |
+|---|---|
+| Selic inicial | 10,75% a.a. (piso 2%, teto 30%) |
+| Inflação inicial | 4,2% a.a. |
+| Meta de inflação | 4,5% (banda ±1,5 pp) |
+| Reunião do banco central | a cada 45 dias |
+| Regra de reação | `selicAlvo = inflação + 0,03 + 1,5·(inflação − meta) − 0,8·outputGap`; suavização `selic += (alvo − selic)·0,08` |
+| Desemprego base | 8% (+6 pp em recessão, −3 pp em pico) |
+| Índice inicial | 100 pontos, volatilidade diária alvo 1,1% |
+
+Duração de cada fase do ciclo (dias, sorteada no intervalo):
+
+| Fase | Duração | Confiança-alvo | Fator de demanda |
+|---|---|---|---|
+| expansão | 540–1.460 | 70 | 1,10 |
+| pico | 90–270 | 85 | 1,18 |
+| recessão | 180–540 | 30 | 0,80 |
+| recuperação | 270–730 | 55 | 0,95 |
+
+Total de 2 a 7 anos por ciclo completo, como o spec pede. Confiança move 0,5/dia
+rumo ao alvo, mais choques de evento.
+
+### 3.7 Bolsa — `config.ts` + `industries.ts`
+
+```
+multiploSetorial = multiploBase[setor] * (0.10 / max(0.04, selic))^0.6
+                   clamp [0.35 × base, 2.2 × base]
+```
+
+O piso de 0,35× é deliberado: sem ele, um choque de Selic derruba o valuation de
+28 empresas ao mesmo tempo e o mercado inteiro vira alvo de aquisição por
+centavos (risco 3 do §4).
+
+| Setor | Múltiplo base | Volatilidade diária | Margem base | Alíquota | Sens. a juros | Mercado anual |
+|---|---|---|---|---|---|---|
+| Tecnologia | 22 | 2,8% | 22% | 34% | 0,7 | R$ 18 B |
+| Saúde | 18 | 1,6% | 14% | 34% | 0,3 | R$ 22 B |
+| Varejo | 12 | 2,0% | 7% | 34% | 0,8 | R$ 45 B |
+| Mídia | 11 | 2,4% | 10% | 25% | 0,6 | R$ 6 B |
+| Energia | 9 | 1,9% | 18% | 30% | 0,4 | R$ 30 B |
+| Bancos | 8 | 1,8% | 28% | 34% | 0,9 | R$ 40 B |
+| Mineração | 7 | 2,6% | 20% | 34% | 0,5 | R$ 25 B |
+
+| Constante de preço | Valor |
+|---|---|
+| `meanReversionRate` | 0,06 (gap clampado a ±5% → drift máx ±0,3%/dia) |
+| `beta` por empresa | 0,7 – 1,6 |
+| Teto de `eventShock` diário por ativo | ±12% |
+| `NEWS_PRICE_COEF` | 0,004 × Σ(sentimento × alcance × credibilidade) |
+| Volume diário máximo | 0,4% das `sharesOutstanding` |
+| Slippage | `(ordem/volumeDiário)^1,3 × 0,08`, teto 25% |
+| Corretagem | R$ 4,90 fixo + 0,15% |
+| IR sobre lucro realizado | 15%, isenção mensal até R$ 20.000 de vendas |
+| Recuperação judicial | caixa < 0 por 3 trimestres consecutivos |
+| Deslistagem por falência | 2 trimestres em RJ sem recuperação |
+| Fechamento de capital | prêmio sobre média de 60 dias, a partir de 90% |
+
+### 3.8 Bancos — `banks.ts`
+
+| Banco | Poupança (× Selic) | Score mín. | Spread do empréstimo | Limite |
+|---|---|---|---|---|
+| Cooperativa Raiz | 0,75 | 200 | Selic + 26 pp | 1,5× renda mensal |
+| Banco do Povo | 0,70 | 300 | Selic + 18 pp | 3× renda |
+| Banco Meridiano | 0,80 | 500 | Selic + 12 pp | 8× renda |
+| Aurora Investimentos | 0,92 (CDB, carência 90 d) | 650 | Selic + 8 pp | 20× renda |
+
+- Rotativo do cartão: 14% ao mês.
+- Financiamento imobiliário: Selic + 4 pp, 360 meses, entrada de 20%.
+- Capital de giro (empresa): Selic + 6 a 16 pp conforme alavancagem.
+- Score: +2 por parcela em dia, −60 por atraso acima de 30 dias, −150 por
+  falência, −1 por cada 0,1 de alavancagem acima de 4× a renda; +1/dia sem
+  pendência.
+
+> Poupança rende no máximo 0,92 × 10,75% = 9,9% nominal ≈ **5,2% real**, contra
+> 7% real do índice. A margem é fina de propósito: renda fixa precisa ser opção
+> defensiva de verdade nas recessões, sem nunca dominar o jogo (risco 1 do §4).
+
+### 3.9 IA — `aiProfiles.ts` + guardrails
+
+Guardrails globais (§5.12), iguais para todos e **nunca suspensos**:
+
+| Guardrail | Valor |
+|---|---|
+| Histerese | ganho projetado > 3% |
+| Rate limit de preço | ±15% por decisão |
+| Cooldown por ação | preço 45 d, marketing 30 d, contratação 30 d, P&D 90 d, M&A 180 d |
+| Piso duro de preço | `custoUnitário × (1 + minMargin)` |
+| Cadência estratégica | 90 dias, offset `hash(companyId) % 90` |
+| Cooldown de gatilho | 15 dias |
+| Amortecimento | magnitude × `(1 − imitation × 0,5)` |
+| `warFatigue` | +1 por trimestre com margem < `minMargin`; recuo em ≥ 3; −1 por trimestre saudável |
+| Decaimento de `grudge` | 0,5%/dia (meia-vida ≈ 1,5 trimestre) |
+
+Por arquétipo (os pesos de utilidade são os da tabela do spec §5.12):
+
+| Arquétipo | `conviction` | `imitation` | `vindictiveness` | `cashReserveTarget` | `minMargin` |
+|---|---|---|---|---|---|
+| Bandeirante | 0,70 | 0,15 | 0,45 | 5% | 1% |
+| Fortaleza | 0,80 | 0,10 | 0,20 | 25% | 12% |
+| Oficina | 0,75 | 0,05 | 0,25 | 15% | 10% |
+| Abutre | 0,60 | 0,20 | 0,80 | 40% | 8% |
+| Espelho | 0,30 | 0,90 | 0,30 | 12% | 4% |
+| Vitrine | 0,35 | 0,35 | 0,55 | 8% | 3% |
+| Padrinho | 0,65 | 0,25 | 0,60 | 18% | 6% |
+| Herdeiro | 0,85 | 0,15 | 0,70 | 30% | 9% |
+| Sobrevivente | 0,20 | 0,50 | 0,15 | 3% | 2% |
+
+`stress`: +0,08 por trimestre de prejuízo, +0,05 por perda de share acima de
+2 pp, +0,04 por queda de 20% na ação no trimestre; −0,03 por trimestre saudável.
+Quebra de personagem em `stress ≥ conviction`, dura 4 trimestres, e ao voltar
+`stress` reseta para `0,3 × conviction`. Sucessão de CEO após 6 trimestres ruins.
+
+### 3.10 Política — `politicians.ts` + `policies.ts`
+
+| Constante | Valor |
+|---|---|
+| Eleição federal | a cada 4 anos, outubro |
+| Eleição local | a cada 4 anos, deslocada 2 anos |
+| Resultado | `0,45·aprovação + 0,15·doações + 0,20·mídia + 0,20·economia + ruído(σ 0,06)` |
+| `DONATION_UNIT` | R$ 100.000 → `loyalty += min(25, (doação/unidade)^0,7)`, decai 0,05/dia |
+| `LOBBY_UNIT` | R$ 500.000 move 1 pp de `supportPct`, com retorno decrescente e **líquido do contra-lobby** |
+| `notoriety` | +3 doação rastreável, +5 manipulação de manchete, +8 demissão em massa, +12 política sob medida; decai 0,02/dia |
+| Investigação | dispara em `notoriety ≥ 60`, prazo 180 dias, `P(condenação) = provas/(provas+8)` |
+| Antitruste | gatilho em share setorial > 45% |
+
+### 3.11 Mídia — `newsOutlets.ts`
+
+| Veículo | Credibilidade | Alcance | Lag | Precisão do rumor |
+|---|---|---|---|---|
+| Tabloide popular | 35 | alto | 0 dia | 60% |
+| Portal de notícias | 55 | muito alto | 1 dia | 75% |
+| Jornal de referência | 90 | médio | 2 dias | 95% |
+| Revista de negócios | 80 | baixo | 3 dias | 92% |
+| Boletim de mercado (premium) | 85 | baixo | 0 dia | 90% |
+
+Manipulação editorial: cada matéria plantada custa −2 de `credibility` do veículo
+(recupera 0,05/dia) e +5 de `notoriety` do dono. Como `eventShock` é proporcional
+à credibilidade, o veículo se desgasta ao ser usado — é esse o freio do risco 2
+do §4.
+
+### 3.12 Orçamento de performance
+
+| Alvo | Limite |
+|---|---|
+| `worldTick` de 1 dia | ≤ 1,5 ms |
+| Runner de 3.650 dias | ≤ 6 s |
+| Projeção da IA | ~24 company-steps/dia (ver C5) |
+| Histórico por ativo | 365 dias diários + candles semanais agregados antes disso |
+| Save serializado | ≤ 2 MB |
+
+---
+
+## 4. Onde eu acho que isto vai desbalancear
+
+Nove pontos, cada um com o sintoma observável no runner headless e a alavanca de
+correção. Estes são os lugares onde eu esperaria gastar tempo de ajuste.
+
+**1. Renda fixa sem risco.** Poupança rendendo Selic diária e composta, sem
+volatilidade e sem imposto modelado, torna "não jogar" uma estratégia viável.
+*Sintoma:* `passive` empatando ou batendo `investor` em 10 anos.
+*Alavanca:* fator de poupança (0,70–0,92 × Selic), carência do CDB, e IR
+regressivo sobre renda fixa se ainda faltar freio.
+
+**2. Jornal como impressora de dinheiro.** Comprar veículo, publicar matéria
+positiva sobre empresa própria, vender na alta, publicar negativa, recomprar.
+*Sintoma:* patrimônio em escada regular e previsível após a compra do primeiro
+veículo; `credibility` do veículo irrelevante para o resultado.
+*Alavanca:* decaimento de `credibility` por matéria plantada (e `eventShock`
+proporcional a ela), cooldown editorial, teto diário de `eventShock` por ativo
+(±12%), `notoriety` → investigação. **É o risco mais provável do projeto**,
+porque o spec faz da mídia o vetor central de causalidade.
+
+**3. Espiral de falência em massa.** Selic alta derruba o múltiplo setorial *e*
+encarece a dívida ao mesmo tempo, nas 28 empresas simultaneamente.
+*Sintoma:* mais de 5 recuperações judiciais em um mesmo trimestre; índice caindo
+abaixo de 40 pontos e não voltando.
+*Alavanca:* piso de 0,35× no múltiplo setorial, vencimentos de dívida
+escalonados na seed, e `Sobrevivente` conseguindo refinanciar (é o arquétipo que
+existe para absorver esse choque).
+
+**4. Distinguibilidade dos arquétipos.** Os pesos do spec deixam Fortaleza e
+Abutre próximos demais (caixa 0,90 vs 0,80; lucro 0,70 vs 0,60; a diferença real
+é `risco` 1,00 vs 0,25). O que os separa de fato são as `hardRules`.
+*Sintoma:* o teste do §8 falhando — sobreposição acima de 60%.
+*Métrica:* a sobreposição é medida sobre a **distribuição de `ActionKind`
+efetivamente executadas** em 10 anos (histograma normalizado, distância de
+variação total), não sobre os pesos.
+*Alavanca:* exagerar pesos (o spec já autoriza: "os pesos estão tímidos demais")
+e endurecer `hardRules`, que são o que produz recusa a jogada obviamente boa.
+
+**5. Ruído vs reversão à média na bolsa.** `meanReversionRate` alto deixa o
+gráfico chato e o rumor sem efeito; baixo deixa o preço descolar do fundamento
+para sempre e a análise fundamentalista morre.
+*Sintoma:* razão preço/valor-fundamental saindo da faixa 0,6–1,7 em regime, ou
+gráfico com autocorrelação diária acima de 0,3.
+*Alavanca:* `meanReversionRate` na faixa 0,04–0,09 e `volatility` por setor.
+
+**6. Bolsa não consome bloco de ação (§5.1).** Operar é grátis em custo de
+oportunidade, o que convida a micro-operação infinita.
+*Sintoma:* `investor` com centenas de ordens por ano e retorno acima de 15%
+real.
+*Alavanca:* corretagem fixa (dói em ordem pequena) + percentual + slippage + IR
+mensal. Se não bastar, limite de ordens por dia.
+
+**7. `grudge` + `vindictiveness` em retaliação perpétua.** Dois NPCs rancorosos
+podem se trancar em ciclo de retaliação, violando o critério de "não mais de 4
+inversões de sinal em 8 decisões".
+*Sintoma:* exatamente esse contador disparando no runner.
+*Alavanca:* decaimento de `grudge` (0,5%/dia), `warFatigue`, e histerese.
+
+**8. Loop de morte no early game.** Se o orçamento de subsistência não fechar, o
+jogador morre ou fica preso sem nunca conseguir estudar (é por isso que C3 tirou
+comer e dormir dos blocos).
+*Sintoma:* `passive` com saúde média abaixo de 50 no primeiro ano, ou zero
+cursos concluídos em 10 anos.
+*Alavanca:* salário do cargo 0 (R$ 1.600) contra custo de vida mínimo
+(R$ 1.380/mês: quarto 700 + transporte 260 + marmita 240 + saúde 180) — a
+margem hoje é de R$ 220/mês, apertada de
+propósito, mas é o primeiro número que vou querer olhar no runner.
+
+**9. Capacidade produtiva como único freio da empresa nova.** Como o mercado
+setorial é da ordem de bilhões e `receita = min(demanda, capacidade)`, a curva
+inteira do `entrepreneur` é definida pelo **custo de expandir capacidade**.
+*Sintoma:* empresa fundada no ano 4 valendo mais que o mercado inteiro no ano
+12; ou o oposto, empresa que nunca sai de R$ 300 mil de receita.
+*Alavanca:* custo por unidade de capacidade, produtividade por funcionário, e
+tempo de rampa de `brandAwareness` — nenhum dos três está fixado neste
+documento, porque só o runner da Fase 5 vai dizer o valor certo. **Este é o
+número que eu mais espero errar na primeira tentativa.**
+
+---
+
+## 5. Determinismo — regras que a Fase 0 já precisa respeitar
+
+Estas não são preferências; são pré-condições dos testes do §8.
+
+- `seed` e `counter` do RNG vivem **dentro** do `GameState`. Nenhum RNG de
+  módulo.
+- `rng.normal()` consome exatamente 2 draws (Box-Muller). Contrato congelado.
+- Nunca iterar coleção sem ordem estável por id — a ordem de iteração determina
+  o consumo do RNG.
+- Nenhum `Date.now()` na engine (ver C7). Nenhum ponto flutuante dependente de
+  ordem de soma em agregados grandes: somar sempre na ordem ordenada por id.
+- Toda mutação via Immer `produce`; o `state` de entrada nunca é tocado.
+- `PublicView` é congelado no passo 11 e **compartilha referência** de arrays
+  imutáveis (ver C12).
+
+---
+
+## 6. O que eu preciso de você antes da Fase 0
+
+1. **Aprovar ou corrigir os alvos do §2.1.** A ordem `passive < investor <
+   entrepreneur < tycoon` é o invariante; os números são discutíveis.
+2. **Confirmar as resoluções C3 a C13 do §1.** Qualquer uma pode ser revertida
+   agora a custo zero; depois da Fase 5 sai caro.
+3. **Dizer se algum número do §3 já parece errado pra você.** Especialmente o
+   custo de vida do §3.5 e os múltiplos setoriais do §3.7 — são os que puxam
+   todo o resto.
+
+Aprovado isto, a Fase 0 entrega: scaffolding Vite + Vue 3 + TS strict + Tailwind,
+`types.ts` com o `GameState` **final completo** (todos os sistemas, mesmo os das
+fases 6–8), save vazio versionado em IndexedDB, e shell PWA com bottom nav de 5
+abas instalável e funcionando offline.
