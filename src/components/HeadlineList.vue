@@ -26,7 +26,9 @@ function ageLabel(age: number): string {
 </script>
 
 <template>
-  <ul class="flex flex-col gap-2">
+  <!-- `relative` porque o item que sai vira `position: absolute` durante a
+       saída; sem o contexto, ele salta para o topo da página. -->
+  <TransitionGroup tag="ul" name="item" class="relative flex flex-col gap-2">
     <li
       v-for="item in items"
       :key="item.headline.id"
@@ -45,5 +47,5 @@ function ageLabel(age: number): string {
         Rumor · {{ Math.round(item.headline.accuracy * 100) }}% de acerto histórico deste veículo
       </p>
     </li>
-  </ul>
+  </TransitionGroup>
 </template>

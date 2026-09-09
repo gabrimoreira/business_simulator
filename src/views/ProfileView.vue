@@ -8,8 +8,12 @@ import { COURSES, findCourse } from '@/data/courses'
 import { jobEligibility } from '@/engine/player'
 import { CAREER } from '@/data/config'
 import { isMuted, toggleMuted } from '@/ui/sound'
+import { useFlash } from '@/ui/useFlash'
 
 const game = useGameStore()
+
+// Patrimônio líquido pisca junto com o caixa: é o placar do jogo.
+const worthFlash = useFlash(() => game.playerNetWorth, 0.005)
 const fileInput = ref<HTMLInputElement | null>(null)
 const message = ref<string | null>(null)
 
@@ -103,7 +107,7 @@ async function deleteGame(): Promise<void> {
       <div class="rounded-2xl border border-line bg-surface p-4">
         <div class="flex items-baseline justify-between">
           <p class="text-xs uppercase tracking-wide text-muted">Patrimônio líquido</p>
-          <p class="tnum text-base font-semibold text-accent">
+          <p class="tnum text-base font-semibold text-accent" :class="worthFlash">
             {{ formatMoneyCompact(game.playerNetWorth) }}
           </p>
         </div>

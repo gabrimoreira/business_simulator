@@ -20,6 +20,15 @@
 
   --spacing-safe-b: env(safe-area-inset-bottom, 0px);
   --spacing-safe-t: env(safe-area-inset-top, 0px);
+
+  /* Movimento. Três durações e nada mais: o jogo é de toque rápido, e animação
+     que dura mais que o gesto atrasa o próximo. `--ease-out` é o padrão porque
+     quase tudo aqui entra na tela; o de saída é mais curto de propósito. */
+  --duration-quick: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
 }
 
 @layer base {
@@ -68,5 +77,145 @@
   ::-webkit-scrollbar {
     width: 0;
     height: 0;
+  }
+}
+
+/* --- Movimento ------------------------------------------------------------
+   Regra única de performance: animar só `transform` e `opacity`. As duas rodam
+   no compositor; largura, altura e posição forçam layout a cada quadro e o
+   celular perde quadro justo na tela cheia de listas. Onde uma barra precisa
+   crescer, ela cresce com `scaleX` sobre a origem esquerda, não com `width`. */
+
+@layer components {
+  /* Modal que sobe do rodapé — o padrão de folha do app. */
+  .sheet-enter-active {
+    transition:
+      transform var(--duration-base) var(--ease-out),
+      opacity var(--duration-base) var(--ease-out);
+  }
+  .sheet-leave-active {
+    transition:
+      transform var(--duration-quick) var(--ease-in),
+      opacity var(--duration-quick) var(--ease-in);
+  }
+  .sheet-enter-from,
+  .sheet-leave-to {
+    opacity: 0;
+  }
+  .sheet-enter-from .sheet-panel,
+  .sheet-leave-to .sheet-panel {
+    transform: translateY(100%);
+  }
+  .sheet-panel {
+    transition: transform var(--duration-base) var(--ease-out);
+  }
+
+  /* Troca de aba. Curta a ponto de não parecer espera: a navegação inferior
+     precisa responder como botão, não como transição de slide. */
+  .aba-enter-active,
+  .aba-leave-active {
+    transition: opacity var(--duration-quick) linear;
+  }
+  .aba-enter-from,
+  .aba-leave-to {
+    opacity: 0;
+  }
+
+  /* Item que entra numa lista (manchete nova, linha de log). Sobe 6px e some a
+     translação — deslocamento maior faz a lista inteira parecer instável. */
+  .item-enter-active {
+    transition:
+      transform var(--duration-base) var(--ease-out),
+      opacity var(--duration-base) var(--ease-out);
+  }
+  .item-enter-from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  /* Reposicionamento dos vizinhos quando um item entra ou sai. */
+  .item-move {
+    transition: transform var(--duration-base) var(--ease-out);
+  }
+  .item-leave-active {
+    position: absolute;
+    transition:
+      transform var(--duration-quick) var(--ease-in),
+      opacity var(--duration-quick) var(--ease-in);
+  }
+  .item-leave-to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  /* Tela de fecho: sobe inteira, uma vez. É o único lugar com duração longa. */
+  .fecho-enter-active {
+    transition:
+      transform var(--duration-slow) var(--ease-out),
+      opacity var(--duration-slow) var(--ease-out);
+  }
+  .fecho-enter-from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  /* Barra de vital. `scaleX` com origem à esquerda: mesmo efeito de `width`,
+     sem custo de layout. */
+  .barra {
+    transform-origin: left center;
+    transition: transform var(--duration-base) var(--ease-out);
+  }
+
+  /* Valor monetário que mudou. Pisca uma vez na cor da direção e volta — é o
+     que faz dinheiro entrando e saindo ser percebido sem ler o log. */
+  .flash-up {
+    animation: flash-up var(--duration-slow) var(--ease-out);
+  }
+  .flash-down {
+    animation: flash-down var(--duration-slow) var(--ease-out);
+  }
+
+  /* Bloco de ação gasto: o pip encolhe em vez de sumir. */
+  .pip {
+    transition:
+      transform var(--duration-base) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out);
+    transform-origin: center;
+  }
+  .pip-gasto {
+    transform: scaleY(0.45);
+  }
+}
+
+@keyframes flash-up {
+  0% {
+    color: var(--color-up);
+    transform: translateY(-2px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes flash-down {
+  0% {
+    color: var(--color-down);
+    transform: translateY(2px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+/* Quem pediu menos movimento recebe menos movimento. Não é enfeite de
+   acessibilidade: em `vestibular disorder` uma tela que desliza a cada toque é
+   sintoma, não estilo. A UI continua inteira — só para de se mover. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
   }
 }

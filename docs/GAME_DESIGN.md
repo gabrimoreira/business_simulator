@@ -952,6 +952,49 @@ gesto nenhum. Os dois limites têm teste.
 
 **O que não foi feito:** animações, o terceiro item do §9 da Fase 8.
 
+### Animações
+
+Último item do §9 da Fase 8. Fecha o escopo do spec.
+
+**Uma regra de performance, sem exceção: só `transform` e `opacity`.** As duas
+rodam no compositor; largura, altura e posição forçam layout a cada quadro, e é
+na tela cheia de lista que o celular perde quadro. Onde uma barra de vital
+precisa crescer, ela cresce com `scaleX` sobre a origem esquerda. Tem teste: a
+folha de estilo é varrida e qualquer `transition:` de outra propriedade reprova.
+
+**Durações em token, não na regra.** Três: 120ms (troca de aba), 200ms (o
+padrão) e 320ms (só a tela de fecho). Duração escrita à mão numa regra é o
+começo de seis velocidades diferentes na mesma tela — também tem teste, com o
+bloco de `prefers-reduced-motion` excluído da varredura, porque ali o `1ms` na
+mão é justamente a correção.
+
+**`prefers-reduced-motion` desliga tudo.** Não é enfeite de acessibilidade: para
+quem tem distúrbio vestibular, tela que desliza a cada toque é sintoma, não
+estilo. A UI continua inteira, só para de se mover.
+
+O que ganhou movimento, e por quê:
+
+| Onde | Efeito | Razão |
+|---|---|---|
+| Caixa e patrimônio | pisca verde/vermelho na direção da mudança | é o placar do jogo; sem isso, dinheiro entrando e saindo só existe no log |
+| Barra de vital | `scaleX` com transição | mostra a direção do dano, não só o número |
+| Pip de bloco | encolhe para 45% ao ser gasto | o orçamento do dia é a mecânica central da C2 |
+| Folha modal | sobe do rodapé | é o padrão de folha do app (ação, resumo de tempo) |
+| Troca de aba | fade de 120ms | curto a ponto de não parecer espera: a barra inferior tem de responder como botão |
+| Manchete nova | entra subindo 6px | deslocamento maior faz a lista inteira parecer instável |
+| Tela de fecho | sobe inteira, 320ms | única duração longa, e acontece uma vez por partida |
+
+**Duas decisões de implementação que o pisca exigiu.** A primeira leitura nunca
+pisca — `before === null` é montagem, não mudança, e sem isso a tela inteira
+acende ao abrir o app, ensinando o jogador a ignorar exatamente o sinal que
+deveria significar algo. E mudança abaixo de meio centavo não pisca: o
+rendimento da poupança move o caixa todo dia, e sem o `epsilon` o pisca vira
+ruído de fundo.
+
+Como no som, a **decisão** é dado puro (`src/ui/motion.ts`, testado em Node) e o
+que toca o DOM fica à parte (`src/ui/useFlash.ts`). Teste de arquitetura guarda
+a separação.
+
 ### O que a Fase 3 mediu, e o que ficou em aberto
 
 Aos 65 anos, em três seeds:

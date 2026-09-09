@@ -167,6 +167,8 @@ function nameOf(companyId: string): string {
       </div>
     </section>
 
-    <StockSheet v-if="selected" :company-id="selected" @close="selected = null" />
+    <Transition name="sheet">
+      <StockSheet v-if="selected" :company-id="selected" @close="selected = null" />
+    </Transition>
   </div>
 </template>

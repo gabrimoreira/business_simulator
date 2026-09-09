@@ -123,6 +123,16 @@ describe('arquitetura da engine', () => {
     }
   })
 
+  it('src/ui/motion.ts é decisão pura: sem DOM e sem Vue', () => {
+    // Mesma razão de `cues.ts`: a regra de quando piscar e quanto encher a
+    // barra roda no vitest em Node. O que toca o DOM mora em `useFlash.ts`.
+    const source = stripComments(readFileSync(join(ROOT, 'src', 'ui', 'motion.ts'), 'utf8'))
+    for (const forbidden of ['window', 'document', 'requestAnimationFrame']) {
+      expect(source.includes(forbidden), `motion.ts usa ${forbidden}`).toBe(false)
+    }
+    expect(importsOf(source)).toEqual([])
+  })
+
   it('engine/types.ts não importa nada', () => {
     const source = stripComments(readFileSync(join(ENGINE_DIR, 'types.ts'), 'utf8'))
     expect(importsOf(source)).toEqual([])

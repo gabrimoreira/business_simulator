@@ -97,7 +97,7 @@ function trade(kind: 'comprarAcao' | 'venderAcao'): void {
   <div class="fixed inset-0 z-50 flex items-end bg-black/70" @click.self="emit('close')">
     <div
       v-if="company && stock"
-      class="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-5"
+      class="sheet-panel max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-5"
       style="padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.25rem)"
     >
       <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-line" />

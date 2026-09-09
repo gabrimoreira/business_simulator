@@ -9,8 +9,13 @@ import { ACTION_COSTS, MEALS_PER_DAY } from '@/data/config'
 import { MEALS } from '@/data/living'
 import { findJob } from '@/data/jobs'
 import type { GameAction } from '@/engine/types'
+import { barScale } from '@/ui/motion'
+import { useFlash } from '@/ui/useFlash'
 
 const game = useGameStore()
+
+// Patrimônio líquido pisca junto com o caixa: é o placar do jogo.
+const worthFlash = useFlash(() => game.playerNetWorth, 0.005)
 const player = computed(() => game.state?.player ?? null)
 
 const vitals = computed(() => {
@@ -113,7 +118,7 @@ function advance(days: number): void {
     <section class="px-4 pt-3">
       <div class="rounded-2xl border border-line bg-surface p-4">
         <p class="text-xs uppercase tracking-wide text-muted">Patrimônio líquido</p>
-        <p class="tnum mt-1 text-2xl font-semibold text-accent">
+        <p class="tnum mt-1 text-2xl font-semibold text-accent" :class="worthFlash">
           {{ formatMoneyCompact(game.playerNetWorth) }}
         </p>
         <p v-if="player && player.overdueBills > 0" class="tnum mt-1 text-xs text-down">
@@ -127,10 +132,12 @@ function advance(days: number): void {
               <dd class="tnum text-xs text-muted">{{ Math.round(vital.value) }}</dd>
             </div>
             <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2">
+              <!-- `scaleX` sobre largura total, e não `width`: a barra anima no
+                   compositor em vez de forçar layout a cada quadro. -->
               <div
-                class="h-full rounded-full"
+                class="barra h-full w-full rounded-full"
                 :class="vital.color"
-                :style="{ width: `${Math.max(0, Math.min(100, vital.value))}%` }"
+                :style="{ transform: `scaleX(${barScale(vital.value)})` }"
               />
             </div>
           </div>

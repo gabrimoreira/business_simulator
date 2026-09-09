@@ -79,16 +79,26 @@ onUnmounted(() => game.stopTicker())
         {{ endingLabel }} — o tempo parou aqui. Apague a partida no Perfil para recomeçar.
       </div>
       <main class="flex-1 overflow-y-auto overscroll-contain pb-2">
-        <RouterView />
+        <!-- `out-in` para as duas telas não se sobreporem durante o cruzamento,
+             com duração curta: a barra inferior tem de responder como botão. -->
+        <RouterView v-slot="{ Component }">
+          <Transition name="aba" mode="out-in">
+            <component :is="Component" />
+          </Transition>
+        </RouterView>
       </main>
       <BottomNav />
-      <EndScreen v-if="game.state?.meta.ending" />
-      <AwayModal
-        v-if="game.awayLog.length"
-        :log="game.awayLog"
-        :title="game.awayTitle"
-        @close="game.clearAwayLog()"
-      />
+      <Transition name="fecho" appear>
+        <EndScreen v-if="game.state?.meta.ending" />
+      </Transition>
+      <Transition name="sheet">
+        <AwayModal
+          v-if="game.awayLog.length"
+          :log="game.awayLog"
+          :title="game.awayTitle"
+          @close="game.clearAwayLog()"
+        />
+      </Transition>
     </template>
   </div>
 </template>
