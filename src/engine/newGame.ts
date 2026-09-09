@@ -10,13 +10,14 @@ import type {
   GameState,
   IndustryState,
   MacroState,
+  OwnershipEntry,
   Player,
   PublicView,
   StartArchetype,
 } from './types'
 import { createRng, range } from './rng'
 import { INDUSTRIES } from '../data/industries'
-import { COMPANY_SEEDS } from '../data/companies.seed'
+import { COMPANY_SEEDS, OWNER_BLOCKS } from '../data/companies.seed'
 import { NEWS_OUTLETS } from '../data/newsOutlets'
 import { AI_PROFILES, ARCHETYPE_BY_COMPANY } from '../data/aiProfiles'
 import { hashId } from './rng'
@@ -186,10 +187,7 @@ export function seedWorld(state: GameState): void {
       /** Preço do produto como índice: 1,0 é a referência do setor. */
       price: 1,
       marketingSpend: 0,
-      ownership: [
-        { holderId: 'float', shares: floatShares },
-        { holderId: `bloco-${seed.id}`, shares: seed.sharesOutstanding - floatShares },
-      ],
+      ownership: buildOwnership(seed.id, seed.sharesOutstanding, floatShares),
       stock: {
         companyId: seed.id,
         // Substituído logo abaixo pelo valor justo; nasce em 1 só para o objeto
@@ -339,6 +337,31 @@ export function seedWorld(state: GameState): void {
   state.companies = companies
   state.companyOrder = companyOrder
   state.macro.marketIndex = MARKET_INDEX_BASE
+}
+
+/**
+ * Reparte o capital fora do float entre blocos identificáveis. Sem isso não há
+ * de quem comprar participação relevante, e a OPA do §5.6 fica sem contraparte.
+ */
+export function buildOwnership(
+  companyId: string,
+  sharesOutstanding: number,
+  floatShares: number,
+): OwnershipEntry[] {
+  const blocked = sharesOutstanding - floatShares
+  const totalWeight = OWNER_BLOCKS.reduce((sum, block) => sum + block.weight, 0)
+
+  const entries: OwnershipEntry[] = [{ holderId: 'float', shares: floatShares }]
+  let assigned = 0
+  OWNER_BLOCKS.forEach((block, index) => {
+    const isLast = index === OWNER_BLOCKS.length - 1
+    const shares = isLast
+      ? blocked - assigned
+      : Math.round((blocked * block.weight) / totalWeight)
+    assigned += shares
+    entries.push({ holderId: `${block.id}@${companyId}`, shares })
+  })
+  return entries
 }
 
 /** Base do índice: 100 pontos no primeiro dia, como qualquer índice do mundo. */

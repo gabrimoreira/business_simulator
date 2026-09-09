@@ -16,6 +16,8 @@ import { MARKET } from '../data/config'
 import { findIndustry } from '../data/industries'
 import { annualizedProfit } from './companies'
 import { debit } from './banking'
+import { applyControl, checkDisclosure, resolveTender } from './ownership'
+import { CONTROL } from '../data/config'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -267,6 +269,8 @@ export function fillBuy(draft: GameState, companyId: string, shares: number): Fi
   position.shares += shares
   position.avgPrice = totalCost / position.shares
   transferOwnership(company, 'player', shares)
+  checkDisclosure(draft, company, [])
+  applyControl(draft, company, [])
 
   return { ok: true, reason: null, shares, price, cost }
 }
@@ -301,6 +305,7 @@ export function fillSell(draft: GameState, companyId: string, shares: number): F
     position.avgPrice = 0
   }
   transferOwnership(company, 'player', -shares)
+  applyControl(draft, company, [])
 
   return { ok: true, reason: null, shares, price, cost: realized }
 }
@@ -442,9 +447,52 @@ function accrueTaxDebts(draft: GameState): void {
   }
 }
 
+/** Vencimento das OPAs e antitruste (spec §5.6). */
+function stepCorporate(draft: GameState, log: LogEntry[]): void {
+  for (const tender of draft.tenders) {
+    if (tender.status !== 'aberta') continue
+    if (draft.date.dayIndex < tender.expiresDayIndex) continue
+    resolveTender(draft, tender, log)
+  }
+  draft.tenders = draft.tenders.filter(
+    (tender) => tender.status === 'aberta' || draft.date.dayIndex - tender.expiresDayIndex < 30,
+  )
+
+  // Antitruste: acima do limiar de participação, investigação aberta.
+  for (const id of draft.companyOrder) {
+    const company = draft.companies[id]
+    if (!company || company.managedBy !== 'player') continue
+    if (company.marketShare < CONTROL.antitrustShare) continue
+    const open = draft.politics.antitrustCases.some(
+      (item) => item.targetId === id && item.status === 'investigando',
+    )
+    if (open) continue
+
+    draft.politics.antitrustCases.push({
+      id: `anti-${id}-${draft.date.dayIndex}`,
+      industryId: company.industryId,
+      targetId: id,
+      openedDayIndex: draft.date.dayIndex,
+      deadlineDayIndex: draft.date.dayIndex + CONTROL.antitrustDeadlineDays,
+      status: 'investigando',
+      lobbyMitigation: 0,
+    })
+    draft.player.notoriety = Math.min(100, draft.player.notoriety + 10)
+    log.push({
+      id: `anti-${id}-${draft.date.dayIndex}`,
+      dayIndex: draft.date.dayIndex,
+      severity: 'ruim',
+      source: 'ownership',
+      text: `${company.name} passou de ${(CONTROL.antitrustShare * 100).toFixed(0)}% do setor: o regulador abriu investigação.`,
+      amount: null,
+    })
+  }
+}
+
 export function stepMarket(draft: GameState, markers: DayMarkers, log: LogEntry[]): void {
   priceStocks(draft, log)
   executeLimitOrders(draft, log)
+  stepCorporate(draft, log)
   accrueTaxDebts(draft)
   if (markers.isQuarterEnd) payDividends(draft, log)
   if (markers.isMonthEnd) settleCapitalGainsTax(draft, log)

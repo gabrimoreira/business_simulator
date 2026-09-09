@@ -5,10 +5,10 @@ import EmptyState from '@/components/EmptyState.vue'
 import ScreenTitle from '@/components/ScreenTitle.vue'
 import { useGameStore } from '@/stores/game'
 import { formatMoney, formatMoneyCompact, formatPercent } from '@/lib/format'
-import { capacityOf, valuationOf } from '@/engine/companies'
+import { annualizedProfit, capacityOf, valuationOf } from '@/engine/companies'
 import { sectorMultiple } from '@/engine/market'
 import { INDUSTRIES, findIndustry } from '@/data/industries'
-import { OPERATIONS } from '@/data/config'
+import { CONTROL, OPERATIONS } from '@/data/config'
 
 const game = useGameStore()
 
@@ -31,6 +31,11 @@ const owned = computed(() => {
         capacity: capacityOf(company!, industry),
         // Qual dos dois está segurando a produção: gente ou máquina.
         bottleneck: capital < labor ? 'capital' : 'pessoas',
+        // Elegibilidade a IPO: quatro trimestres divulgados e os pisos do §5.6.
+        canIpo:
+          company!.quartersReported >= CONTROL.ipoMinQuarters &&
+          company!.revenue >= CONTROL.ipoMinAnnualRevenue * state.macro.priceLevel &&
+          annualizedProfit(company!) >= CONTROL.ipoMinAnnualProfit * state.macro.priceLevel,
         laborCapacity: labor,
         capitalCapacity: capital,
       }
@@ -79,6 +84,21 @@ function adjustRatio(companyId: string, kind: 'ajustarMarketing' | 'investirPeD'
   game.dispatch({ kind, companyId, ratio: Math.max(0, current + delta) })
 }
 
+/** IPO: preço de abertura derivado do valuation, float mínimo do §5.6. */
+function openCapital(companyId: string, valuation: number): void {
+  const company = game.state?.companies[companyId]
+  if (!company) return
+  const shares = company.ownership.reduce((sum, entry) => sum + entry.shares, 0) || 1_000_000
+  game.dispatch({
+    kind: 'abrirCapital',
+    companyId,
+    bankId: 'meridiano',
+    floatPct: 0.3,
+    pricePerShare: Math.max(0.5, valuation / shares),
+  })
+  navigator.vibrate?.(30)
+}
+
 function hire(companyId: string, count: number): void {
   const company = game.state?.companies[companyId]
   const industry = company ? findIndustry(company.industryId) : null
@@ -99,6 +119,7 @@ function hire(companyId: string, count: number): void {
             <p class="text-base font-semibold">{{ item.company.name }}</p>
             <p class="text-xs text-muted">
               {{ item.industry.name }} ·
+              {{ item.company.isPublic ? 'listada' : 'fechada' }} ·
               {{ item.company.status === 'ativa' ? 'operando' : item.company.status }}
             </p>
           </div>
@@ -211,10 +232,19 @@ function hire(companyId: string, count: number): void {
             Demitir 10%
           </button>
           <button
+            v-if="!item.company.isPublic"
             class="min-h-[44px] rounded-xl border border-accent/50 text-sm font-medium text-accent"
             @click="game.dispatch({ kind: 'venderEmpresa', companyId: item.company.id })"
           >
             Vender empresa
+          </button>
+          <button
+            v-if="!item.company.isPublic"
+            class="min-h-[44px] rounded-xl border border-line text-sm font-medium disabled:opacity-30"
+            :disabled="!item.canIpo"
+            @click="openCapital(item.company.id, item.valuation)"
+          >
+            Abrir capital
           </button>
         </div>
       </div>

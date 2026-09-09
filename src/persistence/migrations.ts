@@ -7,7 +7,7 @@
  * teste correspondente em `tests/persistence.spec.ts`.
  */
 import { SAVE_VERSION } from '@/data/config'
-import { seedWorld } from '@/engine/newGame'
+import { buildOwnership, seedWorld } from '@/engine/newGame'
 import { INDUSTRIES } from '@/data/industries'
 import { AI_PROFILES, ARCHETYPE_BY_COMPANY } from '@/data/aiProfiles'
 import { hashId } from '@/engine/rng'
@@ -156,6 +156,28 @@ export const MIGRATIONS: Record<number, Migration> = {
     save.ai = ai
 
     save.saveVersion = 6
+    return save
+  },
+
+  /**
+   * 6 → 7: a Fase 6 quebrou o bloco de controle único em acionistas
+   * identificáveis. Sem isso não há de quem comprar participação relevante, e a
+   * OPA do §5.6 fica sem contraparte.
+   */
+  6: (save) => {
+    const companies = (save.companies ?? {}) as Record<string, RawSave>
+    for (const [id, company] of Object.entries(companies)) {
+      const ownership = company.ownership
+      if (!Array.isArray(ownership)) continue
+      const entries = ownership as Array<{ holderId: string; shares: number }>
+      const legacy = entries.find((entry) => entry.holderId === `bloco-${id}`)
+      if (!legacy) continue
+
+      const float = entries.find((entry) => entry.holderId === 'float')
+      const total = entries.reduce((sum, entry) => sum + entry.shares, 0)
+      company.ownership = buildOwnership(id, total, float?.shares ?? 0)
+    }
+    save.saveVersion = 7
     return save
   },
 }

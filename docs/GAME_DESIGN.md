@@ -735,6 +735,21 @@ marketing em 15%; o Padrinho compra fatia com marketing e chega a 37% do setor.
 Um conselho já trocou o CEO de uma Vitrine por uma Fortaleza depois de seis
 trimestres ruins.
 
+### Ajustes da Fase 6
+
+| O que estava errado | Sintoma | Correção |
+|---|---|---|
+| Bloco de controle único (`bloco-<id>`) | não havia de quem comprar participação relevante, e a OPA ficava sem contraparte | capital fora do float repartido em quatro blocos nomeados, cada um com lealdade própria |
+| Divulgação a cada variação de 1% | uma acumulação de um ano gerava 56 comunicados e 40 manchetes idênticas | divulga ao **cruzar** faixa (5, 10, 15, 20, 25, 30, 40, 50, 75, 90%) |
+| Variável local chamada `window` em `ownership.ts` | o teste de arquitetura acusou uso de API de navegador na engine | renomeada — o falso positivo apontou um nome que sombreava um global |
+
+**Custo de tomar uma empresa, medido.** Acumular o float de uma empresa de mídia
+pequena leva ~260 pregões comprando no teto de volume diário (0,4% do capital),
+e ao final dá 72% e o controle. A OPA pelo resto, com prêmio de 60%, só arranca
+2,8% a mais: a família fundadora (lealdade 0,75) recusa. Os fundos e os
+minoritários organizados aceitam. É o desenho pretendido — o bloco leal é o que
+faz o Herdeiro do §5.12 ser intocável sem uma crise de sucessão.
+
 ### O que a Fase 3 mediu, e o que ficou em aberto
 
 Aos 65 anos, em três seeds:

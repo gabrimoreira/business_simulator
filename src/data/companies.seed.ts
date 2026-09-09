@@ -27,6 +27,27 @@ export interface CompanySeed {
   floatPct: number
 }
 
+/**
+ * Como o capital fora do float se divide. Um bloco único não serve: sem
+ * acionistas identificáveis não há de quem comprar 15%, e a OPA do §5.6 não tem
+ * contraparte. Os pesos são normalizados sobre o que sobra do float.
+ */
+export interface OwnerBlock {
+  /** Sufixo do id do detentor. */
+  id: string
+  label: string
+  weight: number
+  /** Quanto o bloco resiste a vender: entra na decisão da OPA. */
+  loyalty: number
+}
+
+export const OWNER_BLOCKS: OwnerBlock[] = [
+  { id: 'familia', label: 'família fundadora', weight: 0.45, loyalty: 0.75 },
+  { id: 'fundo-aurora', label: 'Fundo Aurora', weight: 0.25, loyalty: 0.25 },
+  { id: 'fundo-horizonte', label: 'Fundo Horizonte', weight: 0.2, loyalty: 0.3 },
+  { id: 'minoritarios', label: 'minoritários organizados', weight: 0.1, loyalty: 0.15 },
+]
+
 export const COMPANY_SEEDS: CompanySeed[] = [
   // --- Tecnologia (mercado R$ 18 bi) ---------------------------------------
   { id: 'nimbo', name: 'Nimbo Sistemas', industryId: 'tecnologia', revenue: 6.2e9, margin: 0.26, sharesOutstanding: 420e6, beta: 1.35, dividendYieldTarget: 0.01, cashRatio: 0.28, debtRatio: 0.12, reputation: 62, floatPct: 0.55 },

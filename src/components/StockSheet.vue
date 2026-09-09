@@ -4,7 +4,9 @@ import StockChart from '@/components/StockChart.vue'
 import { useGameStore } from '@/stores/game'
 import { formatMoney, formatPercent } from '@/lib/format'
 import { fairValue, slippageFor, brokerage } from '@/engine/market'
+import { CONTROL_LABEL, controlLevelFor, referencePrice, stakeOf } from '@/engine/ownership'
 import { findIndustry } from '@/data/industries'
+import { CONTROL } from '@/data/config'
 
 const props = defineProps<{ companyId: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -40,6 +42,43 @@ const pnl = computed(() => {
   const cost = position.value.shares * position.value.avgPrice
   return { value, absolute: value - cost, percent: cost > 0 ? value / cost - 1 : 0 }
 })
+
+/** Participação e o poder que ela destrava (spec §5.6). */
+const control = computed(() => {
+  const c = company.value
+  if (!c) return null
+  const stake = stakeOf(c, 'player')
+  return { stake, level: controlLevelFor(stake), label: CONTROL_LABEL[controlLevelFor(stake)] }
+})
+
+const openTender = computed(
+  () => game.state?.tenders.find((t) => t.companyId === props.companyId && t.status === 'aberta') ?? null,
+)
+
+const premium = ref(30)
+
+/** Custo estimado de comprar tudo que não é seu, pelo prêmio escolhido. */
+const tenderCost = computed(() => {
+  const c = company.value
+  if (!c) return null
+  const shares = c.ownership
+    .filter((entry) => entry.holderId !== 'player')
+    .reduce((sum, entry) => sum + entry.shares, 0)
+  const price = referencePrice(c) * (1 + premium.value / 100)
+  return { shares, total: shares * price, price }
+})
+
+function launchTender(): void {
+  const cost = tenderCost.value
+  if (!cost) return
+  game.dispatch({
+    kind: 'lancarOpa',
+    companyId: props.companyId,
+    premium: premium.value / 100,
+    sharesSought: cost.shares,
+  })
+  navigator.vibrate?.(30)
+}
 
 function trade(kind: 'comprarAcao' | 'venderAcao'): void {
   const quantity = shares.value
@@ -104,6 +143,57 @@ function trade(kind: 'comprarAcao' | 'venderAcao'): void {
             {{ formatMoney(pnl.absolute) }} ({{ formatPercent(pnl.percent, 1) }})
           </p>
         </div>
+      </div>
+
+      <div v-if="control && control.stake > 0" class="mt-3 rounded-xl border border-line p-3">
+        <div class="flex items-baseline justify-between">
+          <p class="text-xs text-muted">Sua participação</p>
+          <p class="tnum text-sm font-semibold text-accent">
+            {{ formatPercent(control.stake, 1) }}
+          </p>
+        </div>
+        <p class="mt-0.5 text-[11px] text-warn">{{ control.label }}</p>
+
+        <div v-if="control.level === 'fechamento'" class="mt-2">
+          <button
+            class="min-h-[40px] w-full rounded-lg border border-accent/50 text-sm text-accent"
+            @click="game.dispatch({ kind: 'fecharCapital', companyId: props.companyId })"
+          >
+            Fechar o capital
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-3 rounded-xl border border-line p-3">
+        <p v-if="openTender" class="text-xs text-warn">
+          Oferta aberta com prêmio de {{ formatPercent(openTender.premium, 0) }} — decide em
+          {{ openTender.expiresDayIndex - (game.state?.date.dayIndex ?? 0) }} dias.
+        </p>
+        <template v-else>
+          <div class="flex items-baseline justify-between">
+            <p class="text-xs text-muted">Oferta pública (OPA)</p>
+            <p class="tnum text-xs">prêmio {{ premium }}%</p>
+          </div>
+          <input
+            v-model.number="premium"
+            class="mt-2 w-full"
+            type="range"
+            :min="CONTROL.minPremium * 100"
+            max="120"
+            step="5"
+          />
+          <p v-if="tenderCost" class="tnum text-[11px] text-muted">
+            {{ formatPercent(tenderCost.shares / (stock.sharesOutstanding || 1), 0) }} do capital por
+            {{ formatMoney(tenderCost.total) }}
+          </p>
+          <button
+            class="mt-2 min-h-[40px] w-full rounded-lg border border-line text-sm disabled:opacity-30"
+            :disabled="!tenderCost || tenderCost.total > (game.state?.player.money ?? 0)"
+            @click="launchTender"
+          >
+            Lançar oferta
+          </button>
+        </template>
       </div>
 
       <div class="mt-4 grid grid-cols-2 gap-2">

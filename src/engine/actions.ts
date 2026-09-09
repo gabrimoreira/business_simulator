@@ -27,9 +27,10 @@ import {
 import { findBank } from '../data/banks'
 import { findOutlet } from '../data/newsOutlets'
 import { findIndustry } from '../data/industries'
-import { OPERATIONS } from '../data/config'
-import { valuationOf } from './companies'
+import { CONTROL, OPERATIONS } from '../data/config'
+import { annualizedProfit, valuationOf } from './companies'
 import { sectorMultiple } from './market'
+import { referencePrice, stakeOf, totalShares } from './ownership'
 import { BANKING } from '../data/config'
 import { fillBuy, fillSell } from './market'
 
@@ -630,6 +631,233 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
           industryState.companyOrder = industryState.companyOrder.filter((id) => id !== company.id)
         }
         log.push(entry('bom', `${company.name} vendida.`, price))
+        return
+      }
+
+      case 'lancarOpa': {
+        const company = draft.companies[action.companyId]
+        if (!company?.stock || !company.isPublic) {
+          log.push(entry('ruim', 'Só empresa listada aceita oferta pública.'))
+          return
+        }
+        if (draft.tenders.some((item) => item.companyId === action.companyId && item.status === 'aberta')) {
+          log.push(entry('ruim', 'Já existe uma oferta aberta para essa empresa.'))
+          return
+        }
+        const premium = clamp(action.premium, CONTROL.minPremium, CONTROL.maxPremium)
+        const reference = referencePrice(company)
+        const pricePerShare = reference * (1 + premium)
+        const cost = pricePerShare * action.sharesSought
+
+        // Sem caixa não há oferta: o mercado exige o dinheiro à vista.
+        if (availableCash(state) < cost) {
+          log.push(entry('ruim', 'Você não tem caixa para bancar a oferta.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        player.blocksUsedToday += 1
+
+        const hostile = stakeOf(company, 'player') < CONTROL.controlStake
+        draft.tenders.push({
+          id: `opa-${company.id}-${draft.date.dayIndex}`,
+          companyId: company.id,
+          bidderId: 'player',
+          premium,
+          pricePerShare,
+          sharesSought: action.sharesSought,
+          hostile,
+          openedDayIndex: draft.date.dayIndex,
+          expiresDayIndex: draft.date.dayIndex + CONTROL.tenderDays,
+          status: 'aberta',
+          acceptedShares: 0,
+        })
+
+        draft.news.headlines.push({
+          id: `hl-opa-${company.id}-${draft.date.dayIndex}`,
+          outletId: 'portal',
+          dayIndex: draft.date.dayIndex,
+          text: `Oferta ${hostile ? 'hostil' : 'amigável'} por ${company.name} com prêmio de ${(premium * 100).toFixed(0)}%`,
+          subject: { kind: 'company', id: company.id },
+          sentiment: 0.4,
+          isRumor: false,
+          accuracy: 1,
+          isTrue: true,
+          planted: false,
+          eventId: null,
+        })
+
+        log.push(entry('info', `OPA lançada sobre ${company.name}.`))
+        return
+      }
+
+      case 'fecharCapital': {
+        const company = draft.companies[action.companyId]
+        if (!company?.stock) {
+          log.push(entry('ruim', 'Empresa não listada.'))
+          return
+        }
+        const stake = stakeOf(company, 'player')
+        if (stake < CONTROL.squeezeOutStake) {
+          log.push(
+            entry('ruim', `Fechar capital exige ${(CONTROL.squeezeOutStake * 100).toFixed(0)}% do capital.`),
+          )
+          return
+        }
+
+        // Compra compulsória dos minoritários com prêmio sobre a média de 60
+        // dias: o minoritário **recebe dinheiro**, não perde a posição (C9).
+        const price = referencePrice(company) * 1.2
+        const outstanding = totalShares(company) * (1 - stake)
+        const cost = price * outstanding
+        if (availableCash(state) < cost) {
+          log.push(entry('ruim', 'Caixa insuficiente para comprar os minoritários.'))
+          return
+        }
+        debit(draft, cost)
+
+        const position = draft.market.positions[company.id]
+        if (position) {
+          position.shares = 0
+          position.avgPrice = 0
+        }
+        company.ownership = [{ holderId: 'player', shares: totalShares(company) }]
+        company.isPublic = false
+        company.stock = null
+        company.managedBy = 'player'
+        log.push(entry('bom', `${company.name} fechou o capital.`, -cost))
+        return
+      }
+
+      case 'abrirCapital': {
+        const company = draft.companies[action.companyId]
+        const bank = findBank(action.bankId)
+        if (!company || company.managedBy !== 'player' || company.isPublic || !bank) {
+          log.push(entry('ruim', 'Operação indisponível.'))
+          return
+        }
+        if (company.quartersReported < CONTROL.ipoMinQuarters) {
+          log.push(
+            entry('ruim', `A empresa precisa de ${CONTROL.ipoMinQuarters} trimestres divulgados.`),
+          )
+          return
+        }
+        const revenueFloor = nominal(draft.macro, CONTROL.ipoMinAnnualRevenue)
+        const profitFloor = nominal(draft.macro, CONTROL.ipoMinAnnualProfit)
+        if (company.revenue < revenueFloor || annualizedProfit(company) < profitFloor) {
+          log.push(entry('ruim', 'Receita ou lucro abaixo do exigido para abrir capital.'))
+          return
+        }
+        const floatPct = clamp(action.floatPct, CONTROL.ipoMinFloat, CONTROL.ipoMaxFloat)
+        if (action.pricePerShare <= 0) {
+          log.push(entry('ruim', 'Preço de abertura inválido.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        player.blocksUsedToday += 1
+
+        const shares = totalShares(company) || 1_000_000
+        const floatShares = Math.round(shares * floatPct)
+        const raised = floatShares * action.pricePerShare
+        const fee = raised * CONTROL.ipoBankFeeRatio
+
+        company.isPublic = true
+        company.stock = {
+          companyId: company.id,
+          price: action.pricePerShare,
+          sharesOutstanding: shares,
+          beta: 1.1,
+          volatility: findIndustry(company.industryId)?.volatility ?? 0.02,
+          dividendYieldTarget: 0.02,
+          history: [],
+          weeklyCount: 0,
+          volumeToday: 0,
+          eventShockToday: 0,
+        }
+        company.ownership = [
+          { holderId: 'player', shares: shares - floatShares },
+          { holderId: 'float', shares: floatShares },
+        ]
+        company.cash += raised - fee
+        draft.ipos.push({
+          companyId: company.id,
+          underwriterBankId: bank.id,
+          floatPct,
+          pricePerShare: action.pricePerShare,
+          feePaid: fee,
+          dayIndex: draft.date.dayIndex,
+        })
+
+        draft.news.headlines.push({
+          id: `hl-ipo-${company.id}-${draft.date.dayIndex}`,
+          outletId: 'referencia',
+          dayIndex: draft.date.dayIndex,
+          text: `${company.name} abre capital coordenada por ${bank.name}`,
+          subject: { kind: 'company', id: company.id },
+          sentiment: 0.5,
+          isRumor: false,
+          accuracy: 1,
+          isTrue: true,
+          planted: false,
+          eventId: null,
+        })
+
+        log.push(entry('bom', `${company.name} abriu capital.`, raised - fee))
+        return
+      }
+
+      case 'fundir': {
+        const acquirer = draft.companies[action.acquirerId]
+        const target = draft.companies[action.targetId]
+        if (!acquirer || !target || acquirer.managedBy !== 'player') {
+          log.push(entry('ruim', 'Operação indisponível.'))
+          return
+        }
+        if (stakeOf(target, 'player') <= CONTROL.controlStake) {
+          log.push(entry('ruim', 'Você precisa controlar a empresa alvo para fundir.'))
+          return
+        }
+        if (acquirer.industryId !== target.industryId) {
+          log.push(entry('ruim', 'Só empresas do mesmo setor se fundem por enquanto.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        player.blocksUsedToday += 1
+
+        const synergy = 1 + CONTROL.mergerSynergy
+        acquirer.capitalStock += target.capitalStock
+        acquirer.cash += target.cash - action.cash
+        acquirer.debt += target.debt
+        acquirer.workforce.headcount += target.workforce.headcount
+        acquirer.capacity = (acquirer.capacity + target.capacity) * synergy
+        acquirer.directives.headcountTarget =
+          acquirer.workforce.headcount + target.workforce.headcount
+        // Choque de cultura: a fusão custa moral dos dois lados.
+        acquirer.workforce.morale = clamp(
+          acquirer.workforce.morale - CONTROL.mergerCultureShock,
+          0,
+          100,
+        )
+
+        target.status = 'adquirida'
+        target.managedBy = 'ai'
+        draft.companyOrder = draft.companyOrder.filter((id) => id !== target.id)
+        const industryState = draft.industries[target.industryId]
+        if (industryState) {
+          industryState.companyOrder = industryState.companyOrder.filter((id) => id !== target.id)
+        }
+        delete draft.ai.agents[target.id]
+        draft.ai.agentOrder = draft.ai.agentOrder.filter((id) => id !== target.id)
+
+        log.push(entry('bom', `${target.name} incorporada por ${acquirer.name}.`))
         return
       }
 

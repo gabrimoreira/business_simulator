@@ -39,10 +39,17 @@ describe('serialização', () => {
 describe('migrations', () => {
   /** Desfaz na mão o que a migration N-1 → N deve refazer. */
   function migrated0(save: Record<string, unknown>): Record<string, unknown> {
-    const ai = save.ai as Record<string, unknown>
-    ai.agents = {}
-    ai.agentOrder = []
-    ai.profiles = {}
+    const companies = save.companies as Record<string, Record<string, unknown>>
+    for (const [id, company] of Object.entries(companies)) {
+      const ownership = company.ownership as Array<{ holderId: string; shares: number }>
+      const float = ownership.find((entry) => entry.holderId === 'float')
+      const total = ownership.reduce((sum, entry) => sum + entry.shares, 0)
+      // Volta ao bloco único da versão 6.
+      company.ownership = [
+        { holderId: 'float', shares: float?.shares ?? 0 },
+        { holderId: `bloco-${id}`, shares: total - (float?.shares ?? 0) },
+      ]
+    }
     return save
   }
 
@@ -52,19 +59,20 @@ describe('migrations', () => {
     // A migration mais nova (4 → 5) trocou a lista de funcionários pelo quadro
     // agregado e deu capital instalado a cada empresa. Um save da versão N-1 é
     // um save com `employees` e sem `workforce`.
-    // A migration mais nova (5 → 6) dá personalidade às concorrentes. Um save da
-    // versão N-1 é um save sem agente nenhum.
+    // A migration mais nova (6 → 7) quebra o bloco de controle único em
+    // acionistas identificáveis. Um save da versão N-1 tem `bloco-<id>`.
     migrated0(legacy)
 
     const migrated = migrate(legacy)
+    const company = migrated.companies[migrated.companyOrder[0]!]!
 
     expect(migrated.saveVersion).toBe(SAVE_VERSION)
-    expect(migrated.ai.agentOrder).toHaveLength(28)
-    expect(Object.keys(migrated.ai.profiles)).toHaveLength(9)
-    const agent = migrated.ai.agents[migrated.ai.agentOrder[0]!]!
-    expect(agent.profileId).toBeDefined()
-    expect(agent.reviewOffset).toBeGreaterThanOrEqual(0)
-    expect(agent.reviewOffset).toBeLessThan(90)
+    const holders = company.ownership.map((entry) => entry.holderId)
+    expect(holders.some((holder) => holder.startsWith('bloco-'))).toBe(false)
+    expect(holders.filter((holder) => holder !== 'float').length).toBeGreaterThanOrEqual(3)
+    expect(company.ownership.reduce((sum, entry) => sum + entry.shares, 0)).toBe(
+      company.stock!.sharesOutstanding,
+    )
   })
 
   it('percorre a cadeia inteira a partir da versão 0', () => {

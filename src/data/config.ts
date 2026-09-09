@@ -7,7 +7,7 @@
  */
 
 /** Versão do formato de save. Incrementar exige uma migration (§3.5). */
-export const SAVE_VERSION = 6
+export const SAVE_VERSION = 7
 
 // --- Tempo (GAME_DESIGN §3.1) ----------------------------------------------
 
@@ -506,4 +506,49 @@ export const AI = {
   projectionSteps: 13,
   /** Passos de dias por semana projetada. */
   projectionStepDays: 7,
+} as const
+
+// --- Controle, OPA, IPO e fusão (spec §5.6) --------------------------------
+
+export const CONTROL = {
+  /** Limiares de participação que desbloqueiam poder. */
+  relevantStake: 0.05,
+  boardStake: 0.15,
+  blockingStake: 0.25,
+  controlStake: 0.5,
+  squeezeOutStake: 0.9,
+
+  /** Prazo de uma OPA, em dias. */
+  tenderDays: 30,
+  /** Prêmio mínimo aceito como oferta séria. */
+  minPremium: 0.05,
+  maxPremium: 1.5,
+  /** Janela usada para o preço de referência da oferta. */
+  referenceWindowDays: 60,
+
+  /**
+   * Aceitação de cada bloco: base + prêmio − lealdade − confiança na gestão
+   * atual + humor da imprensa. É aqui que comprar jornal vira arma real.
+   */
+  acceptBase: 0.1,
+  acceptPremiumWeight: 1.4,
+  acceptLoyaltyWeight: 0.8,
+  acceptManagementWeight: 0.5,
+  acceptSentimentWeight: 0.35,
+
+  /** IPO: exigências mínimas e custo. */
+  ipoMinQuarters: 4,
+  ipoMinAnnualRevenue: 5_000_000,
+  ipoMinAnnualProfit: 400_000,
+  ipoBankFeeRatio: 0.05,
+  ipoMinFloat: 0.15,
+  ipoMaxFloat: 0.6,
+
+  /** Fusão: sinergia e choque de cultura. */
+  mergerSynergy: 0.08,
+  mergerCultureShock: 20,
+
+  /** Antitruste: participação setorial que aciona investigação. */
+  antitrustShare: 0.45,
+  antitrustDeadlineDays: 540,
 } as const
