@@ -8,7 +8,7 @@
  * medindo um jogo que ninguém joga.
  */
 import { createInitialState } from '@/engine/newGame'
-import { bankBalance, netWorth, realNetWorth } from '@/engine/selectors'
+import { bankBalance, netWorth, portfolioValue, realNetWorth } from '@/engine/selectors'
 import { applyAction } from '@/engine/actions'
 import { runDays } from '@/engine/autoplay'
 import type { GameState } from '@/engine/types'
@@ -50,6 +50,8 @@ const COLUMNS = [
   'realNetWorth',
   'money',
   'bank',
+  'stocks',
+  'index',
   'job',
   'salary',
   'score',
@@ -79,6 +81,8 @@ function row(state: GameState): string {
     realNetWorth(state).toFixed(2),
     player.money.toFixed(2),
     bankBalance(state).toFixed(2),
+    portfolioValue(state).toFixed(2),
+    macro.marketIndex.toFixed(1),
     job ? job.id : '-',
     player.career.salary.toFixed(2),
     player.creditScore.toFixed(0),
@@ -138,6 +142,8 @@ function main(): void {
     `humor médio ${(moodSum / daysLived).toFixed(1)}`,
     `cursos ${state.player.education.length}`,
     `cargo ${state.player.currentJobId ?? '-'}`,
+    `carteira ${portfolioValue(state).toFixed(0)}`,
+    `índice ${state.macro.marketIndex.toFixed(0)}`,
     `desfecho ${state.meta.ending ?? 'em andamento'}`,
   ].join(' · ')
   process.stderr.write(`\n${summary}\n`)

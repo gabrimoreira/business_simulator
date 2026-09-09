@@ -26,8 +26,12 @@ import {
 } from './banking'
 import { findBank } from '../data/banks'
 import { BANKING } from '../data/config'
+import { fillBuy, fillSell } from './market'
 
 const clampVital = (value: number): number => clamp(value, 0, VITALS.max)
+
+/** Validade padrão de uma ordem limite em livro, em dias. */
+const MARKET_ORDER_VALIDITY_DAYS = 30
 
 /**
  * Id determinístico: dia + blocos já gastos + tipo da ação. Precisa ser
@@ -284,6 +288,94 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         }
         player.routine = action.routine.slice(0, ACTION_BLOCKS_PER_DAY)
         log.push(entry('info', 'Rotina atualizada.'))
+        return
+      }
+
+      case 'comprarAcao':
+      case 'venderAcao': {
+        const company = draft.companies[action.companyId]
+        if (!company?.stock) {
+          log.push(entry('ruim', 'Ativo desconhecido.'))
+          return
+        }
+        if (action.shares <= 0 || !Number.isFinite(action.shares)) {
+          log.push(entry('ruim', 'Quantidade inválida.'))
+          return
+        }
+
+        // Ordem limite não executa agora: entra em livro e espera o preço
+        // cruzar (spec §5.3). Operar na bolsa não consome bloco de ação.
+        if (action.limitPrice !== null) {
+          if (action.limitPrice <= 0) {
+            log.push(entry('ruim', 'Preço limite inválido.'))
+            return
+          }
+          draft.market.orders.push({
+            id: `ord-${draft.date.dayIndex}-${draft.market.orders.length}-${action.companyId}`,
+            companyId: action.companyId,
+            kind: 'limite',
+            side: action.kind === 'comprarAcao' ? 'compra' : 'venda',
+            shares: action.shares,
+            limitPrice: action.limitPrice,
+            placedDayIndex: draft.date.dayIndex,
+            expiresDayIndex: draft.date.dayIndex + MARKET_ORDER_VALIDITY_DAYS,
+          })
+          log.push(entry('info', `Ordem limite registrada em ${company.name}.`))
+          return
+        }
+
+        const result =
+          action.kind === 'comprarAcao'
+            ? fillBuy(draft, action.companyId, action.shares)
+            : fillSell(draft, action.companyId, action.shares)
+
+        if (!result.ok) {
+          log.push(entry('ruim', result.reason ?? 'Ordem recusada.'))
+          return
+        }
+
+        if (action.kind === 'comprarAcao') {
+          log.push(
+            entry('info', `Compra de ${action.shares} ${company.name}.`, -result.cost),
+          )
+        } else {
+          log.push(
+            entry(
+              result.cost >= 0 ? 'bom' : 'ruim',
+              `Venda de ${action.shares} ${company.name}.`,
+              result.cost,
+            ),
+          )
+        }
+        return
+      }
+
+      case 'cancelarOrdem': {
+        const index = draft.market.orders.findIndex((order) => order.id === action.orderId)
+        if (index < 0) {
+          log.push(entry('ruim', 'Ordem não encontrada.'))
+          return
+        }
+        draft.market.orders.splice(index, 1)
+        log.push(entry('info', 'Ordem cancelada.'))
+        return
+      }
+
+      case 'pagarImposto': {
+        const index = draft.market.taxDebts.findIndex((item) => item.id === action.debtId)
+        const item = draft.market.taxDebts[index]
+        if (!item) {
+          log.push(entry('ruim', 'Pendência não encontrada.'))
+          return
+        }
+        const total = item.amount + item.penalty
+        if (availableCash(state) < total) {
+          log.push(entry('ruim', 'Dinheiro insuficiente para quitar o imposto.'))
+          return
+        }
+        debit(draft, total)
+        draft.market.taxDebts.splice(index, 1)
+        log.push(entry('bom', 'Imposto quitado.', -total))
         return
       }
 

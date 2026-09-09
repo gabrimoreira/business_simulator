@@ -65,7 +65,7 @@ describe('macro', () => {
     const early = advance(base, 40)
     const earlyBill = early.entries.find((e) => e.text.includes('Contas do mês'))
 
-    const later = advance(early.state, 3650)
+    const later = advance(early.state, 2200)
     const lateBill = [...later.entries].reverse().find((e) => e.text.includes('Contas do mês'))
 
     expect(earlyBill?.amount).toBeDefined()
@@ -209,7 +209,7 @@ describe('crédito', () => {
   })
 
   it('a recuperação passiva de score para no teto sem histórico de crédito', () => {
-    const state = advance(employed(fresh(), 5000, 500_000), 3650).state
+    const state = advance(employed(fresh(), 5000, 500_000), 1800).state
     expect(state.player.creditScore).toBe(BANKING.scoreCleanRecoveryCeiling)
   })
 })

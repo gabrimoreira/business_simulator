@@ -40,13 +40,19 @@ describe('migrations', () => {
   it('save da versão N-1 carrega na versão N', () => {
     const legacy = JSON.parse(toJson(fixture())) as Record<string, unknown>
     legacy.saveVersion = SAVE_VERSION - 1
-    const macro = legacy.macro as Record<string, unknown>
-    delete macro.priceLevel
+    // A migration mais nova (3 → 4) povoa o mundo da bolsa em saves que não o
+    // tinham. Um save da versão N-1 é exatamente um save sem empresa nenhuma.
+    legacy.companies = {}
+    legacy.companyOrder = []
+    legacy.industries = {}
+    legacy.industryOrder = []
 
     const migrated = migrate(legacy)
 
     expect(migrated.saveVersion).toBe(SAVE_VERSION)
-    expect(migrated.macro.priceLevel).toBe(1)
+    expect(migrated.companyOrder).toHaveLength(28)
+    expect(migrated.industryOrder).toHaveLength(7)
+    expect(migrated.companies[migrated.companyOrder[0]!]?.stock?.price).toBeGreaterThan(0)
   })
 
   it('percorre a cadeia inteira a partir da versão 0', () => {
@@ -58,6 +64,8 @@ describe('migrations', () => {
     delete player.overdueBills
     delete legacy.meta
     delete (legacy.macro as Record<string, unknown>).priceLevel
+    legacy.companies = {}
+    legacy.companyOrder = []
 
     const migrated = migrate(legacy)
 
@@ -66,6 +74,7 @@ describe('migrations', () => {
     expect(migrated.player.blocksUsedToday).toBe(0)
     expect(migrated.player.overdueBills).toBe(0)
     expect(migrated.macro.priceLevel).toBe(1)
+    expect(migrated.companyOrder).toHaveLength(28)
     expect(migrated.meta.startArchetype).toBe('comum')
   })
 

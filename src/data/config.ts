@@ -7,7 +7,7 @@
  */
 
 /** Versão do formato de save. Incrementar exige uma migration (§3.5). */
-export const SAVE_VERSION = 3
+export const SAVE_VERSION = 4
 
 // --- Tempo (GAME_DESIGN §3.1) ----------------------------------------------
 
@@ -244,4 +244,79 @@ export const BANKING = {
   scoreLeveragePenaltyPerStep: 1,
   /** Dia do mês em que a fatura do cartão fecha. */
   cardStatementDay: 20,
+} as const
+
+// --- Bolsa (GAME_DESIGN §3.7) ----------------------------------------------
+
+export const MARKET = {
+  /** Selic de referência do múltiplo setorial. */
+  selicReference: 0.1,
+  /** Piso da Selic no cálculo do múltiplo: evita múltiplo explodindo a juro zero. */
+  selicFloorForMultiple: 0.04,
+  multipleExponent: 0.6,
+  multipleFloorRatio: 0.35,
+  multipleCeilingRatio: 2.2,
+
+  /** Reversão à média: fração do desvio do valor justo corrigida por dia. */
+  meanReversionRate: 0.06,
+  /** Desvio máximo considerado no drift, para não haver salto. */
+  driftClamp: 0.05,
+
+  /** Deriva anual do índice por fase do ciclo. */
+  indexPhaseDrift: { expansao: 0.12, pico: 0.04, recessao: -0.25, recuperacao: 0.18 },
+  /** Volatilidade diária do fator de mercado. */
+  indexVolatility: 0.009,
+  /** Choque no índice por ponto percentual de mudança da Selic. */
+  selicShock: 4,
+  /** Efeito da variação diária de confiança no índice. */
+  confidenceEffect: 0.002,
+
+  /** Teto do choque de evento/notícia por ativo por dia (Fase 4). */
+  eventShockCap: 0.12,
+
+  /** Volume diário negociável como fração das ações em circulação. */
+  dailyVolumeRatio: 0.004,
+  slippageK: 0.08,
+  slippageExponent: 1.3,
+  slippageCap: 0.25,
+
+  /** Corretagem: fixo + percentual. */
+  brokerageFixed: 4.9,
+  brokeragePercent: 0.0015,
+
+  /** IR sobre lucro realizado e isenção mensal de vendas. */
+  capitalGainsTax: 0.15,
+  monthlySalesExemption: 20_000,
+  taxDebtPenalty: 0.02,
+  taxDebtMonthlyInterest: 0.01,
+
+  /** Dividendo trimestral = preço × yield alvo ÷ 4, limitado pelo caixa. */
+  dividendCashReserve: 0.05,
+
+  /** Trimestres seguidos de caixa negativo até a recuperação judicial. */
+  quartersToBankruptcy: 3,
+  /** Trimestres em recuperação judicial até a deslistagem. */
+  quartersToDelisting: 2,
+
+  /** Janela de candles diários mantida em estado. */
+  dailyCandleWindow: 365,
+  /**
+   * Teto de candles semanais (3 anos). Sem ele o histórico cresce para sempre:
+   * numa partida de 47 anos seriam 2.400 semanais por ativo, e o custo do tick
+   * é proporcional ao total de candles — medido em 2,2 ms/dia com 196 candles
+   * contra 6,3 ms/dia com 460.
+   */
+  weeklyCandleWindow: 156,
+} as const
+
+/** Convergência da receita para a tendência e ruído idiossincrático. */
+export const COMPANY_OPS = {
+  revenueSpeed: 0.02,
+  revenueNoise: 0.004,
+  /** Quanto a margem comprime/expande com o ciclo. */
+  marginCycleWeight: 1.5,
+  /** Juro da dívida corporativa = Selic + isto. */
+  debtSpread: 0.04,
+  /** Trimestres de lucro guardados. */
+  profitHistorySize: 8,
 } as const

@@ -650,6 +650,54 @@ existir engine para medi-los. Todos vieram do runner headless.
 | Recuperação de score | sem teto | teto de 700 | quem nunca tomou crédito chegava a 1000 no ano 8; acima de 700 só com histórico real |
 | Carência do CDB | renovada a cada aporte | contada do primeiro aporte | aplicar todo mês prendia o dinheiro **para sempre**, e nada na tela avisava — o `investor` terminou 47 anos sem um único diploma por causa disso |
 
+### Ajustes da Fase 3
+
+| Constante | Antes | Depois | Por quê |
+|---|---|---|---|
+| Compactação de candles | 1 diário → 1 semanal por dia | 7 diários → 1 semanal, uma vez por semana | converter um por dia não encolhe nada, e reconstruir o array diariamente dentro do draft do Immer custava segundos por ano simulado |
+| Teto de candles semanais | não existia | 156 (3 anos) | o histórico crescia para sempre; em 47 anos seriam 2.400 semanais por ativo |
+| Passo `perception` | dentro do `produce` | sobre o estado já finalizado | dentro do draft, a referência ao histórico é um proxy que o Immer finaliza copiando — o oposto do que a C12 pede |
+| Valor justo de empresa no prejuízo | zero | múltiplo de receita | com zero, um trimestre ruim derrubava o preço por um degrau em vez de por uma ladeira |
+| Dívida de 3 empresas na seed | 0,48–0,62 da receita | 0,26–0,30 | nasciam insolventes: os juros comiam a margem antes do primeiro dia |
+
+**Custo do tick.** Medido em 2,2 ms/dia com 196 candles por ativo e 6,3 ms/dia
+com 460 — o custo é proporcional ao total de candles guardado no estado, porque
+o Immer percorre os arrays modificados a cada `produce`. Com a janela do spec
+(365 diários + 156 semanais) o runner de 10 anos leva ~24 s, acima do orçamento
+de 6 s do §3.12. **Débito registrado:** se a Fase 5b apertar, o caminho é tirar o
+histórico de preço do estado produzido pelo Immer e guardá-lo à parte, que é
+para isso que o object store `history` existe.
+
+### O que a Fase 3 mediu, e o que ficou em aberto
+
+Aos 65 anos, em três seeds:
+
+| Estratégia | Patrimônio real | Faixa do §2.1 |
+|---|---|---|
+| `passive` | R$ 1,03–1,19 M | R$ 1,1–1,8 M — dentro, tangenciando o piso |
+| `investor` | R$ 1,94–2,18 M | R$ 20–70 M — **dez vezes abaixo** |
+
+O índice compõe a ~6% reais ao ano em 47 anos, que é a ordem certa. O problema
+está na **estratégia de compra do runner**, não obviamente no motor: na Fase 2,
+com o dinheiro só na poupança, o mesmo `investor` terminava com R$ 5,9 M reais —
+ou seja, comprar ação está rendendo **menos** que a renda fixa, o que é o
+oposto do desenho.
+
+Um experimento controlado (mesmo seed, só mudando a regra de compra) mostrou que
+comprar o índice inteiro rende 38% mais que comprar os três papéis mais
+descontados em relação ao valor justo: a peneira de valor está pegando armadilha.
+Isso explica parte da diferença, não toda. As duas hipóteses restantes, na ordem
+em que pretendo testá-las na Fase 4:
+
+1. **Ordem das decisões no runner.** A estratégia aplica no banco no dia 5 e
+   compra ação no dia 10, então o salário vai quase todo para a renda fixa antes
+   de sobrar para a bolsa. A comparação Fase 2 × Fase 3 pode estar medindo isso,
+   e não o mercado.
+2. **Arrasto de volatilidade.** Com desvio diário de 1,6% a 2,8%, o retorno
+   geométrico de um papel isolado perde σ²/2 por ano — até 12% ao ano em
+   mineração. A reversão à média compensa parte, mas concentrar em poucos nomes
+   paga o arrasto cheio.
+
 **Consequência de design que apareceu na medição:** como o salário é mensal,
 trabalhar dois blocos no mesmo dia não rende nada além de desempenho para
 promoção. O terceiro bloco vale mais em socializar (carisma → Encarregado) ou

@@ -202,6 +202,12 @@ export interface Stock {
   volatility: number
   dividendYieldTarget: Ratio
   history: Candle[]
+  /**
+   * Quantos candles do início de `history` são semanais. Guardado para que a
+   * compactação diária seja O(1) na verificação: varrer o histórico todo dia
+   * custa caro dentro do draft do Immer.
+   */
+  weeklyCount: number
   /** Volume negociado hoje; limita ordens grandes e gera slippage. */
   volumeToday: number
   /** Soma dos choques de evento/notícia aplicáveis hoje. */
@@ -396,8 +402,14 @@ export interface Company {
   stock: Stock | null
   reputation: number
   directives: CompanyDirectives
-  /** Receita máxima suportada pela estrutura atual; freio do early game. */
+  /**
+   * Receita anual de tendência, em nominal. Na Fase 3 ela é o eixo em torno do
+   * qual a receita realizada oscila com o ciclo; na Fase 5 passa a ser o teto
+   * físico de produção, que é o freio do early game.
+   */
   capacity: number
+  /** Margem operacional de referência da empresa, antes do efeito do ciclo. */
+  baseMargin: number
   /** Participação no setor, derivada de atratividade relativa (C4). */
   marketShare: Ratio
   status: CompanyStatus

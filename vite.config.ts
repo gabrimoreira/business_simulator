@@ -51,6 +51,9 @@ export default defineConfig({
   ],
   test: {
     environment: 'node',
+    // Os testes de sanidade simulam 10 anos de jogo com a bolsa rodando; o
+    // default de 5s não cabe uma década.
+    testTimeout: 180_000,
     include: ['tests/**/*.spec.ts'],
     setupFiles: ['tests/setup.ts'],
   },

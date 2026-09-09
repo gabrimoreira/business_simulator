@@ -9,6 +9,7 @@ import { COURSES } from '@/data/courses'
 import { BANKS } from '@/data/banks'
 import { jobEligibility } from '@/engine/player'
 import { nominal } from '@/engine/macro'
+import { fairValue } from '@/engine/market'
 
 /** Reserva de sobrevivência antes de gastar com matrícula: ~2 meses de custo. */
 const SURVIVAL_BUFFER = 3000
@@ -32,6 +33,8 @@ export interface Strategy {
   applyEveryDays: number
   /** Aplica o excedente acima da reserva no banco de melhor rendimento. */
   savesInBank: boolean
+  /** Compra ações do papel mais descontado em relação ao valor justo. */
+  investsInStocks: boolean
 }
 
 const STRATEGIES: Record<StrategyId, Strategy> = {
@@ -49,6 +52,7 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     // "Só trabalha" também guarda o que sobra: deixar dinheiro parado embaixo do
     // colchão não é uma estratégia, é um bug de comportamento.
     savesInBank: true,
+    investsInStocks: false,
   },
   investor: {
     id: 'investor',
@@ -56,6 +60,7 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     coursePlan: ['tecnico', 'graduacao', 'pos', 'mba'],
     applyEveryDays: 30,
     savesInBank: true,
+    investsInStocks: true,
   },
   // As três abaixo ainda se comportam como `investor`; ganham corpo nas fases
   // 3, 5 e 6.
@@ -65,6 +70,7 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     coursePlan: ['tecnico', 'graduacao'],
     applyEveryDays: 30,
     savesInBank: true,
+    investsInStocks: true,
   },
   tycoon: {
     id: 'tycoon',
@@ -72,6 +78,7 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     coursePlan: ['oratoria', 'graduacao', 'mba'],
     applyEveryDays: 30,
     savesInBank: true,
+    investsInStocks: true,
   },
   pricewar: {
     id: 'pricewar',
@@ -79,6 +86,7 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     coursePlan: [],
     applyEveryDays: 30,
     savesInBank: true,
+    investsInStocks: false,
   },
   raider: {
     id: 'raider',
@@ -86,6 +94,7 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     coursePlan: ['financas', 'graduacao'],
     applyEveryDays: 30,
     savesInBank: true,
+    investsInStocks: true,
   },
 }
 
@@ -143,8 +152,41 @@ export function decideActions(state: GameState, strategy: Strategy): GameAction[
     }
   }
 
-  // Aplica o excedente. Escolhe o melhor rendimento entre os bancos em que o
-  // score dá acesso — é a decisão que o jogador toma na aba Mundo.
+  // Compra o papel mais descontado em relação ao valor justo, uma vez por mês.
+  // É a versão mecânica do que o jogador faz olhando a lista da aba Mercado.
+  if (strategy.investsInStocks && state.date.dayIndex % 30 === 10) {
+    const buffer = nominal(state.macro, SURVIVAL_BUFFER)
+    const surplus = player.money - buffer
+    if (surplus > 0) {
+      const ranked = state.companyOrder
+        .flatMap((id) => {
+          const company = state.companies[id]
+          const stock = company?.stock
+          if (!company || !stock || company.status !== 'ativa') return []
+          const fair = fairValue(state, company)
+          if (fair <= 0) return []
+          return [{ id, price: stock.price, ratio: stock.price / fair, stock }]
+        })
+        .sort((a, b) => a.ratio - b.ratio)
+        .slice(0, 3)
+
+      // Divide entre os três mais descontados e respeita um teto de 20% do
+      // volume diário: despejar o excedente inteiro num papel só paga
+      // deslizamento de dois dígitos e concentra risco à toa.
+      const perName = surplus / Math.max(1, ranked.length)
+      for (const candidate of ranked) {
+        const byMoney = Math.floor(perName / candidate.price)
+        const byVolume = Math.floor(candidate.stock.sharesOutstanding * 0.0008)
+        const shares = Math.min(byMoney, byVolume)
+        if (shares > 0) {
+          actions.push({ kind: 'comprarAcao', companyId: candidate.id, shares, limitPrice: null })
+        }
+      }
+    }
+  }
+
+  // Aplica o excedente que sobrar. Escolhe o melhor rendimento entre os bancos
+  // em que o score dá acesso — é a decisão que o jogador toma na aba Mundo.
   if (strategy.savesInBank && state.date.dayIndex % 30 === 5) {
     const buffer = nominal(state.macro, SURVIVAL_BUFFER)
     const surplus = player.money - buffer

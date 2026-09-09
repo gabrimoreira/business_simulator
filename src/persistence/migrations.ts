@@ -7,6 +7,7 @@
  * teste correspondente em `tests/persistence.spec.ts`.
  */
 import { SAVE_VERSION } from '@/data/config'
+import { seedWorld } from '@/engine/newGame'
 import type { GameState } from '@/engine/types'
 
 type RawSave = Record<string, unknown>
@@ -65,6 +66,17 @@ export const MIGRATIONS: Record<number, Migration> = {
     if (typeof macro.priceLevel !== 'number') macro.priceLevel = 1
     save.macro = macro
     save.saveVersion = 3
+    return save
+  },
+
+  /**
+   * 3 → 4: a Fase 3 abriu a bolsa. Saves anteriores não têm empresa nenhuma, e
+   * o mundo é povoado pelo mesmo `seedWorld` da partida nova — a alternativa
+   * seria uma tabela paralela que sairia do ar na primeira mudança de seed.
+   */
+  3: (save) => {
+    seedWorld(save as unknown as GameState)
+    save.saveVersion = 4
     return save
   },
 }
