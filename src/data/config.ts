@@ -276,6 +276,25 @@ export const BANKING = {
 // --- Bolsa (GAME_DESIGN §3.7) ----------------------------------------------
 
 export const MARKET = {
+  /**
+   * Quanto se pode dever por real de garantia na conta margem.
+   *
+   * Baixo de propósito: venda a descoberto tem perda **ilimitada** — o preço
+   * sobe sem teto e quem está vendido paga a diferença. Dois é o suficiente
+   * para a operação valer a pena e não o bastante para uma alta de 50% zerar o
+   * jogador num dia.
+   */
+  marginLeverage: 2,
+
+  /**
+   * Fração da garantia que a posição vendida pode consumir antes da chamada.
+   *
+   * Ao cruzar isto, a corretora **recompra sozinha** a preço de mercado. Não é
+   * punição: é o que impede a dívida de passar da garantia e virar buraco sem
+   * fundo no patrimônio.
+   */
+  marginCallRatio: 0.75,
+
   /** Selic de referência do múltiplo setorial. */
   selicReference: 0.1,
   /** Piso da Selic no cálculo do múltiplo: evita múltiplo explodindo a juro zero. */
@@ -381,6 +400,32 @@ export const NEWS = {
   minPriorityByReach: 3,
   /** Dia do mês em que a assinatura premium é cobrada. */
   subscriptionDay: 1,
+
+  /** Preço de um veículo não listado, por ponto de alcance, em R$ do ano 0. */
+  outletPricePerReach: 45_000,
+
+  /** Comprar jornal é aparecer: dono de imprensa é figura pública. */
+  outletNotoriety: 10,
+
+  /**
+   * Quanto a pauta puxa o sentimento na direção pedida, de 0 a 1.
+   *
+   * Não é 1 de propósito: dono de jornal enquadra, não inventa. Com 1 um
+   * escândalo viraria elogio e a manchete perderia relação com o fato.
+   */
+  agendaPull: 0.6,
+
+  /** Dias em que a redação fica presa à pauta imposta. */
+  agendaCooldownDays: 45,
+
+  /**
+   * Credibilidade perdida a cada pauta imposta.
+   *
+   * Mandar no que o jornal diz funciona — e gasta o próprio instrumento: o
+   * choque de preço de uma manchete é proporcional à credibilidade do veículo,
+   * então quem abusa da pauta fica com um megafone que ninguém mais escuta.
+   */
+  agendaCredibilityCost: 4,
 } as const
 
 // --- Operação de empresas (GAME_DESIGN C4) ---------------------------------
@@ -430,6 +475,35 @@ export const OPERATIONS = {
    * ditado pela intensidade do gasto — e quem para de gastar volta a zero.
    */
   brandDecayRate: 0.00045,
+
+  /**
+   * Quanto da marca sobrevive à mudança de setor.
+   *
+   * Ser conhecida em varejo não faz ninguém confiar em você em energia — mas
+   * também não zera: a empresa continua tendo nome.
+   */
+  sectorEntryBrandCarry: 0.4,
+
+  /** Teto de venda de divisão por operação. Vender tudo é `venderEmpresa`. */
+  maxDivisionSale: 0.5,
+
+  /** Teto de distribuição de lucro. Empresa que distribui tudo não cresce. */
+  maxPayoutRatio: 0.8,
+
+  /**
+   * Quanto do capital desmobilizado volta como caixa.
+   *
+   * Menos que 1 de propósito: máquina usada não vale preço de máquina nova, e
+   * com 1 o par expandir/reduzir viraria torneira grátis de caixa.
+   */
+  capacitySalvageRatio: 0.6,
+
+  /**
+   * Campanha pontual rende mais por real que o marketing contínuo, porque é
+   * gasto de uma vez — mas passa pela mesma saturação: marca conhecida ganha
+   * pouco, anunciar não compra reputação.
+   */
+  campaignBrandMultiplier: 3,
   qualityDecayRate: 0.00025,
   /**
    * Ganho por real gasto, relativo à receita diária do setor. Calibrado para

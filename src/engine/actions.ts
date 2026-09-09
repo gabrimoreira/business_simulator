@@ -36,14 +36,15 @@ import { findOutlet } from '../data/newsOutlets'
 import { findAsset } from '../data/assets'
 import { ASSETS_CONFIG } from '../data/config'
 import { findIndustry } from '../data/industries'
-import { CONTROL, DEFENSE, OPERATIONS, POLITICS } from '../data/config'
+import { CONTROL, DEFENSE, NEWS, OPERATIONS, POLITICS } from '../data/config'
 import { findPolicyDef } from '../data/policies'
 import { netLobby } from './politics'
-import { annualizedProfit, valuationOf } from './companies'
+import { annualizedProfit, capitalNeededFor, valuationOf } from './companies'
 import { sectorMultiple } from './market'
 import {
   applyControl,
   buyFromFloat,
+  buyback,
   poisonPill,
   referencePrice,
   sellToFloat,
@@ -53,6 +54,7 @@ import {
 } from './ownership'
 import { BANKING } from '../data/config'
 import { fillBuy, fillSell } from './market'
+import { MARKET } from '../data/config'
 
 const clampVital = (value: number): number => clamp(value, 0, VITALS.max)
 
@@ -1611,6 +1613,347 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         log.push(
           entry('info', `Você votou ${action.inFavor ? 'a favor' : 'contra'}: ${policy.name}.`),
         )
+        return
+      }
+
+      case 'pagarDividendos': {
+        const company = draft.companies[action.companyId]
+        if (!company || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        // Diretriz persistente, como preço e marketing (C2): o caixa sai no
+        // fechamento do trimestre, em `companies.ts`, não aqui.
+        const ratio = clamp(action.ratio, 0, OPERATIONS.maxPayoutRatio)
+        player.blocksUsedToday += 1
+        company.directives.payoutRatio = ratio
+        log.push(
+          entry('info', `${company.name} distribuirá ${Math.round(ratio * 100)}% do lucro.`),
+        )
+        return
+      }
+
+      case 'recomprarAcoes': {
+        const company = draft.companies[action.companyId]
+        if (!company || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (!company.isPublic) {
+          log.push(entry('ruim', 'Só empresa de capital aberto recompra ações.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        if (action.amount <= 0 || company.cash < action.amount) {
+          log.push(entry('ruim', 'A empresa não tem caixa para isso.'))
+          return
+        }
+        // Mesma função que a IA usa para se defender (`agents.ts`): recompra
+        // tira float do mercado e concentra o controle de quem já está dentro.
+        const shares = buyback(draft, company, action.amount)
+        if (shares <= 0) {
+          log.push(entry('ruim', 'Não há float suficiente para recomprar.'))
+          return
+        }
+        player.blocksUsedToday += 1
+        applyControl(draft, company, log)
+        log.push(entry('bom', `${company.name} recomprou ${shares} ações.`, -action.amount))
+        return
+      }
+
+      case 'reduzirCapacidade': {
+        const company = draft.companies[action.companyId]
+        if (!company || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        if (action.amount <= 0 || action.amount > company.capitalStock) {
+          log.push(entry('ruim', 'A empresa não tem esse capital instalado.'))
+          return
+        }
+        // Desmobilizar devolve **menos** do que custou: máquina usada não vale o
+        // preço de máquina nova, e sem essa perda encolher e crescer viraria uma
+        // torneira grátis de caixa.
+        const recovered = action.amount * OPERATIONS.capacitySalvageRatio
+        player.blocksUsedToday += 1
+        company.capitalStock -= action.amount
+        company.cash += recovered
+        log.push(entry('info', `Capacidade de ${company.name} reduzida.`, recovered))
+        return
+      }
+
+      case 'anunciarProduto': {
+        const company = draft.companies[action.companyId]
+        const industry = company ? findIndustry(company.industryId) : null
+        if (!company || !industry || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        if (action.spend <= 0 || company.cash < action.spend) {
+          log.push(entry('ruim', 'A empresa não tem caixa para isso.'))
+          return
+        }
+        // Campanha pontual, contra o marketing que é diretriz contínua. Usa a
+        // mesma escala de setor e a mesma saturação do passo diário, para uma
+        // marca já conhecida ganhar pouco — anunciar não é comprar reputação.
+        const sectorScale = Math.max(1, industry.marketSize / 365)
+        const saturation = 1 - company.brandAwareness / 100
+        const gain =
+          (action.spend / sectorScale) * OPERATIONS.brandGainPerRatio * saturation *
+          OPERATIONS.campaignBrandMultiplier
+        player.blocksUsedToday += 1
+        company.cash -= action.spend
+        company.brandAwareness = clamp(company.brandAwareness + gain, 0, 100)
+        log.push(entry('info', `Campanha de ${company.name} no ar.`, -action.spend))
+        return
+      }
+
+      case 'comprarVeiculo': {
+        const definition = findOutlet(action.outletId)
+        const outlet = draft.news.outlets[action.outletId]
+        if (!definition || !outlet) {
+          log.push(entry('ruim', 'Veículo desconhecido.'))
+          return
+        }
+        if (outlet.ownerId === 'player') {
+          log.push(entry('ruim', 'O veículo já é seu.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        // Preço: se o veículo é listado, vale o que a empresa vale; se não é,
+        // vale o alcance. Comprar imprensa não é barato de propósito — é a
+        // alavanca mais forte do jogo sobre a percepção pública.
+        const listed = outlet.companyId ? draft.companies[outlet.companyId] : null
+        const industry = listed ? findIndustry(listed.industryId) : null
+        const price =
+          listed && industry
+            ? valuationOf(listed, sectorMultiple(industry.multipleBase, draft.macro.selic))
+            : nominal(draft.macro, outlet.reach * NEWS.outletPricePerReach)
+        if (availableCash(state) < price) {
+          log.push(entry('ruim', `Comprar ${outlet.name} custa ${Math.round(price)}.`))
+          return
+        }
+        player.blocksUsedToday += 1
+        debit(draft, price)
+        outlet.ownerId = 'player'
+        // Dono de jornal é figura pública: aparece, e quem aparece é olhado.
+        player.notoriety = clamp(player.notoriety + NEWS.outletNotoriety, 0, 100)
+        log.push(entry('bom', `Você comprou ${outlet.name}.`, -price))
+        return
+      }
+
+      case 'definirPauta': {
+        const outlet = draft.news.outlets[action.outletId]
+        if (!outlet) {
+          log.push(entry('ruim', 'Veículo desconhecido.'))
+          return
+        }
+        if (outlet.ownerId !== 'player') {
+          log.push(entry('ruim', 'Você não é dono desse veículo.'))
+          return
+        }
+        const pending = draft.news.editorialOrders.find(
+          (order) => order.outletId === outlet.id && draft.date.dayIndex < order.cooldownUntilDayIndex,
+        )
+        if (pending) {
+          log.push(entry('ruim', 'A redação ainda está cumprindo a pauta anterior.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        player.blocksUsedToday += 1
+        draft.news.editorialOrders.push({
+          id: `pauta-${outlet.id}-${draft.date.dayIndex}`,
+          outletId: outlet.id,
+          subject: action.subject,
+          targetSentiment: clamp(action.targetSentiment, -1, 1),
+          dayIndex: draft.date.dayIndex,
+          cooldownUntilDayIndex: draft.date.dayIndex + NEWS.agendaCooldownDays,
+        })
+        // Mandar no que o jornal diz custa credibilidade: a redação percebe.
+        outlet.credibility = clamp(outlet.credibility - NEWS.agendaCredibilityCost, 0, 100)
+        log.push(entry('info', `Pauta definida em ${outlet.name}.`))
+        return
+      }
+
+      case 'entrarEmSetor': {
+        const company = draft.companies[action.companyId]
+        const industry = findIndustry(action.industryId)
+        if (!company || company.managedBy !== 'player' || !industry) {
+          log.push(entry('ruim', 'Operação indisponível.'))
+          return
+        }
+        if (company.industryId === action.industryId) {
+          log.push(entry('ruim', 'A empresa já opera nesse setor.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        // Entrar num setor exige o capital que sustenta um funcionário lá — é o
+        // mesmo piso que vale para fundar. Energia e mineração pedem R$ 3 mi por
+        // cabeça: são setores para quem já tem empresa grande, e é isso que dá
+        // sentido a existir aquisição.
+        const minimum = capitalNeededFor(industry.outputPerEmployee, industry)
+        if (action.investment < minimum) {
+          log.push(entry('ruim', `Entrar em ${industry.name} exige ${Math.round(minimum)}.`))
+          return
+        }
+        if (company.cash < action.investment) {
+          log.push(entry('ruim', 'A empresa não tem caixa para isso.'))
+          return
+        }
+        player.blocksUsedToday += 1
+        company.cash -= action.investment
+        company.capitalStock += action.investment
+        // Migra de setor levando a operação junto. A marca **não** vai inteira:
+        // ser conhecida em varejo não faz ninguém confiar em você em energia.
+        company.industryId = action.industryId
+        company.brandAwareness = clamp(
+          company.brandAwareness * OPERATIONS.sectorEntryBrandCarry,
+          0,
+          100,
+        )
+        log.push(entry('info', `${company.name} entrou em ${industry.name}.`, -action.investment))
+        return
+      }
+
+      case 'venderDivisao': {
+        const company = draft.companies[action.companyId]
+        const industry = company ? findIndustry(company.industryId) : null
+        if (!company || !industry || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        const fraction = clamp(action.fraction, 0, OPERATIONS.maxDivisionSale)
+        if (fraction <= 0) {
+          log.push(entry('ruim', 'Fração inválida.'))
+          return
+        }
+        // Vender divisão é vender pedaço da operação pelo múltiplo do setor, não
+        // pelo capital instalado: quem compra está comprando lucro futuro.
+        const value =
+          valuationOf(company, sectorMultiple(industry.multipleBase, draft.macro.selic)) * fraction
+        player.blocksUsedToday += 1
+        company.capitalStock *= 1 - fraction
+        company.workforce.headcount = Math.max(
+          1,
+          Math.round(company.workforce.headcount * (1 - fraction)),
+        )
+        company.directives.headcountTarget = company.workforce.headcount
+        company.capacity *= 1 - fraction
+        company.cash += value
+        log.push(
+          entry('bom', `Você vendeu ${Math.round(fraction * 100)}% de ${company.name}.`, value),
+        )
+        return
+      }
+
+      case 'habilitarMargem': {
+        if (action.collateral <= 0) {
+          log.push(entry('ruim', 'Garantia inválida.'))
+          return
+        }
+        if (availableCash(state) < action.collateral) {
+          log.push(entry('ruim', 'Você não tem esse dinheiro para dar em garantia.'))
+          return
+        }
+        debit(draft, action.collateral)
+        draft.market.margin.enabled = true
+        draft.market.margin.collateral += action.collateral
+        log.push(entry('info', 'Conta margem habilitada.', -action.collateral))
+        return
+      }
+
+      case 'venderDescoberto': {
+        const company = draft.companies[action.companyId]
+        const stock = company?.stock
+        if (!company || !stock) {
+          log.push(entry('ruim', 'Ativo indisponível.'))
+          return
+        }
+        if (!draft.market.margin.enabled) {
+          log.push(entry('ruim', 'Habilite a conta margem antes de vender a descoberto.'))
+          return
+        }
+        if (action.shares <= 0) {
+          log.push(entry('ruim', 'Quantidade inválida.'))
+          return
+        }
+        // O que se pode dever é múltiplo da garantia, não do bolso: vender a
+        // descoberto tem perda **ilimitada**, e é a garantia que responde.
+        const value = action.shares * stock.price
+        const limit = draft.market.margin.collateral * MARKET.marginLeverage
+        if (draft.market.margin.borrowed + value > limit) {
+          log.push(entry('ruim', 'Acima do limite da sua garantia.'))
+          return
+        }
+
+        const position = draft.market.positions[action.companyId] ?? {
+          companyId: action.companyId,
+          shares: 0,
+          avgPrice: 0,
+          shortShares: 0,
+        }
+        if (!draft.market.positions[action.companyId]) {
+          draft.market.positions[action.companyId] = position
+          draft.market.positionOrder.push(action.companyId)
+        }
+        position.shortShares += action.shares
+        draft.market.margin.borrowed += value
+        player.money += value
+        log.push(entry('info', `Vendido a descoberto: ${company.name}.`, value))
+        return
+      }
+
+      case 'recomprarDescoberto': {
+        const company = draft.companies[action.companyId]
+        const stock = company?.stock
+        const position = draft.market.positions[action.companyId]
+        if (!company || !stock || !position || position.shortShares <= 0) {
+          log.push(entry('ruim', 'Você não tem posição vendida nesse ativo.'))
+          return
+        }
+        const shares = Math.min(action.shares, position.shortShares)
+        if (shares <= 0) {
+          log.push(entry('ruim', 'Quantidade inválida.'))
+          return
+        }
+        const cost = shares * stock.price
+        if (availableCash(state) < cost) {
+          log.push(entry('ruim', 'Sem caixa para recomprar.'))
+          return
+        }
+        debit(draft, cost)
+        position.shortShares -= shares
+        // A dívida cai proporcionalmente ao que foi coberto.
+        draft.market.margin.borrowed = Math.max(0, draft.market.margin.borrowed - cost)
+        log.push(entry('info', `Posição vendida coberta em ${company.name}.`, -cost))
         return
       }
 

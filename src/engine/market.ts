@@ -509,8 +509,55 @@ function stepCorporate(draft: GameState, log: LogEntry[]): void {
   }
 }
 
+/**
+ * Chamada de margem: recompra sozinha quando a posição vendida come a garantia.
+ *
+ * Roda **depois** de `priceStocks`, porque é o preço novo que dispara a
+ * chamada. Sem isso a venda a descoberto seria dívida sem consequência: o preço
+ * subiria sem teto e o buraco passaria da garantia direto para o patrimônio.
+ *
+ * A corretora cobre a preço de mercado e cobra do jogador — não pede licença. É
+ * a única liquidação forçada do jogo, e é assim que funciona de verdade.
+ */
+function marginCall(draft: GameState, log: LogEntry[]): void {
+  const margin = draft.market.margin
+  if (!margin.enabled || margin.borrowed <= 0) return
+
+  // Valor de reposição da posição vendida ao preço de hoje.
+  let owed = 0
+  for (const companyId of draft.market.positionOrder) {
+    const position = draft.market.positions[companyId]
+    const price = draft.companies[companyId]?.stock?.price
+    if (!position || !price || position.shortShares <= 0) continue
+    owed += position.shortShares * price
+  }
+  if (owed <= margin.collateral * MARKET.marginCallRatio) return
+
+  for (const companyId of draft.market.positionOrder) {
+    const position = draft.market.positions[companyId]
+    const company = draft.companies[companyId]
+    const price = company?.stock?.price
+    if (!position || !company || !price || position.shortShares <= 0) continue
+
+    const cost = position.shortShares * price
+    const covered = position.shortShares
+    position.shortShares = 0
+    margin.collateral = Math.max(0, margin.collateral - cost)
+    log.push({
+      id: `margem-${companyId}-${draft.date.dayIndex}`,
+      dayIndex: draft.date.dayIndex,
+      severity: 'critico',
+      source: 'market',
+      text: `Chamada de margem: ${covered} ações de ${company.name} recompradas à força.`,
+      amount: -cost,
+    })
+  }
+  margin.borrowed = 0
+}
+
 export function stepMarket(draft: GameState, markers: DayMarkers, log: LogEntry[]): void {
   priceStocks(draft, log)
+  marginCall(draft, log)
   executeLimitOrders(draft, log)
   stepCorporate(draft, log)
   accrueTaxDebts(draft)

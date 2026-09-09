@@ -67,7 +67,21 @@ function publish(
     if (!chance(draft.rng, willPublish)) return
   }
 
-  const sentiment = biasedSentiment(outlet, def.topic, def.sentiment)
+  const natural = biasedSentiment(outlet, def.topic, def.sentiment)
+  // Pauta imposta pelo dono (§5.8): puxa o sentimento para o alvo em vez de
+  // substituí-lo. Substituir faria um escândalo virar elogio e a manchete
+  // deixaria de ter relação com o fato; puxar é o que um dono de jornal
+  // consegue de verdade — enquadrar, não inventar.
+  const order = draft.news.editorialOrders.find(
+    (item) =>
+      item.outletId === outlet.id &&
+      item.subject.kind === event.subject.kind &&
+      item.subject.id === event.subject.id &&
+      draft.date.dayIndex < item.cooldownUntilDayIndex,
+  )
+  const sentiment = order
+    ? natural + (order.targetSentiment - natural) * NEWS.agendaPull
+    : natural
   const headline: Headline = {
     id: `hl-${event.id}-${outlet.id}`,
     outletId: outlet.id,
@@ -81,7 +95,7 @@ function publish(
     accuracy: outlet.rumorAccuracy,
     // Falso é falso mesmo publicado por veículo sério — e ninguém avisa.
     isTrue: event.willHappen,
-    planted: false,
+    planted: order !== undefined,
     eventId: event.id,
   }
 
