@@ -22,6 +22,12 @@ export interface IndustryDefinition {
   marketSize: number
   /** Crescimento real anual de tendência do setor. */
   realGrowth: number
+  /** Receita anual por funcionário, em R$ do ano 0. Define a capacidade. */
+  outputPerEmployee: number
+  /** Fração da receita que vai para a folha em operação normal. */
+  payrollRatio: number
+  /** Giro do ativo: receita anual por real de capital instalado. */
+  capitalTurnover: number
   /** Multiplicador de demanda por mês (jan a dez). */
   seasonality: number[]
 }
@@ -31,6 +37,9 @@ const FLAT = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 export const INDUSTRIES: IndustryDefinition[] = [
   {
     id: 'tecnologia',
+    capitalTurnover: 1.0,
+    outputPerEmployee: 800000,
+    payrollRatio: 0.35,
     realGrowth: 0.06,
     name: 'Tecnologia',
     multipleBase: 22,
@@ -43,6 +52,9 @@ export const INDUSTRIES: IndustryDefinition[] = [
   },
   {
     id: 'saude',
+    capitalTurnover: 1.2,
+    outputPerEmployee: 400000,
+    payrollRatio: 0.3,
     realGrowth: 0.035,
     name: 'Saúde',
     multipleBase: 18,
@@ -55,6 +67,9 @@ export const INDUSTRIES: IndustryDefinition[] = [
   },
   {
     id: 'varejo',
+    capitalTurnover: 3.0,
+    outputPerEmployee: 350000,
+    payrollRatio: 0.12,
     realGrowth: 0.02,
     name: 'Varejo',
     multipleBase: 12,
@@ -68,6 +83,9 @@ export const INDUSTRIES: IndustryDefinition[] = [
   },
   {
     id: 'midia',
+    capitalTurnover: 1.5,
+    outputPerEmployee: 500000,
+    payrollRatio: 0.28,
     realGrowth: 0.005,
     name: 'Mídia',
     multipleBase: 11,
@@ -80,6 +98,9 @@ export const INDUSTRIES: IndustryDefinition[] = [
   },
   {
     id: 'energia',
+    capitalTurnover: 0.5,
+    outputPerEmployee: 1500000,
+    payrollRatio: 0.1,
     realGrowth: 0.025,
     name: 'Energia',
     multipleBase: 9,
@@ -92,6 +113,9 @@ export const INDUSTRIES: IndustryDefinition[] = [
   },
   {
     id: 'bancos',
+    capitalTurnover: 2.0,
+    outputPerEmployee: 900000,
+    payrollRatio: 0.22,
     realGrowth: 0.03,
     name: 'Bancos',
     multipleBase: 8,
@@ -106,6 +130,9 @@ export const INDUSTRIES: IndustryDefinition[] = [
   },
   {
     id: 'mineracao',
+    capitalTurnover: 0.6,
+    outputPerEmployee: 1800000,
+    payrollRatio: 0.09,
     realGrowth: 0.015,
     name: 'Mineração',
     multipleBase: 7,

@@ -207,11 +207,23 @@ function scoreMaintenance(draft: GameState): void {
   }
 }
 
+/** Parcela de empréstimo empresarial: sai do caixa da empresa, não do bolso. */
+function chargeCompanyLoan(draft: GameState, loan: Loan): void {
+  const company = draft.companies[loan.borrower]
+  if (!company) return
+  const r = dailyRate(loan.rate)
+  loan.remaining *= 1 + r
+  const due = Math.min(loan.dailyPayment, loan.remaining)
+  company.cash -= due
+  loan.remaining -= due
+  if (loan.remaining <= 0.01) company.debt = Math.max(0, company.debt - loan.principal)
+}
+
 export function stepBanking(draft: GameState, markers: DayMarkers, log: LogEntry[]): void {
   accrueSavings(draft)
   for (const loan of draft.banking.loans) {
-    if (loan.borrower !== 'player') continue
-    chargeLoan(draft, loan, log)
+    if (loan.borrower === 'player') chargeLoan(draft, loan, log)
+    else chargeCompanyLoan(draft, loan)
   }
   settleLoans(draft, log)
   chargeCards(draft, markers, log)

@@ -78,7 +78,7 @@ function buildPublicView(state: GameState, markers: DayMarkers): PublicView {
         profit: company.profitHistory[0] ?? 0,
         cash: company.cash,
         debt: company.debt,
-        employeeCount: company.employees.length,
+        employeeCount: company.workforce.headcount,
         marketShare: company.marketShare,
         reputation: company.reputation,
         // Empresa privada não divulga preço: o concorrente enxerga pouco (C13).

@@ -37,22 +37,39 @@ describe('serialização', () => {
 })
 
 describe('migrations', () => {
+  /** Desfaz na mão o que a migration N-1 → N deve refazer. */
+  function migrated0(save: Record<string, unknown>): Record<string, unknown> {
+    const companies = save.companies as Record<string, Record<string, unknown>>
+    for (const company of Object.values(companies)) {
+      delete company.workforce
+      delete company.capitalStock
+      company.employees = []
+    }
+    const industries = save.industries as Record<string, Record<string, unknown>>
+    for (const industry of Object.values(industries)) delete industry.trendSize
+    return save
+  }
+
   it('save da versão N-1 carrega na versão N', () => {
     const legacy = JSON.parse(toJson(fixture())) as Record<string, unknown>
     legacy.saveVersion = SAVE_VERSION - 1
-    // A migration mais nova (3 → 4) povoa o mundo da bolsa em saves que não o
-    // tinham. Um save da versão N-1 é exatamente um save sem empresa nenhuma.
-    legacy.companies = {}
-    legacy.companyOrder = []
-    legacy.industries = {}
-    legacy.industryOrder = []
+    // A migration mais nova (4 → 5) trocou a lista de funcionários pelo quadro
+    // agregado e deu capital instalado a cada empresa. Um save da versão N-1 é
+    // um save com `employees` e sem `workforce`.
+    const first = migrated0(legacy)
+    expect(first).toBeDefined()
 
     const migrated = migrate(legacy)
+    const company = migrated.companies[migrated.companyOrder[0]!]!
 
     expect(migrated.saveVersion).toBe(SAVE_VERSION)
-    expect(migrated.companyOrder).toHaveLength(28)
-    expect(migrated.industryOrder).toHaveLength(7)
-    expect(migrated.companies[migrated.companyOrder[0]!]?.stock?.price).toBeGreaterThan(0)
+    expect(company.workforce.headcount).toBeGreaterThan(0)
+    expect(company.workforce.avgSalary).toBeGreaterThan(0)
+    expect(company.capitalStock).toBeGreaterThan(0)
+    expect((company as unknown as Record<string, unknown>).employees).toBeUndefined()
+    for (const industryId of migrated.industryOrder) {
+      expect(migrated.industries[industryId]!.trendSize).toBeGreaterThan(0)
+    }
   })
 
   it('percorre a cadeia inteira a partir da versão 0', () => {
@@ -66,6 +83,8 @@ describe('migrations', () => {
     delete (legacy.macro as Record<string, unknown>).priceLevel
     legacy.companies = {}
     legacy.companyOrder = []
+    legacy.industries = {}
+    legacy.industryOrder = []
 
     const migrated = migrate(legacy)
 

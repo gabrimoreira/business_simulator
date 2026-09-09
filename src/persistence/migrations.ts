@@ -8,6 +8,7 @@
  */
 import { SAVE_VERSION } from '@/data/config'
 import { seedWorld } from '@/engine/newGame'
+import { INDUSTRIES } from '@/data/industries'
 import type { GameState } from '@/engine/types'
 
 type RawSave = Record<string, unknown>
@@ -77,6 +78,43 @@ export const MIGRATIONS: Record<number, Migration> = {
   3: (save) => {
     seedWorld(save as unknown as GameState)
     save.saveVersion = 4
+    return save
+  },
+
+  /**
+   * 4 → 5: a Fase 5 trocou a lista de funcionários individuais pelo quadro
+   * agregado e deu ao setor um tamanho de tendência. Reparo dirigido em vez de
+   * repovoar o mundo: a partir daqui o save pode conter a empresa do jogador, e
+   * repovoar apagaria o trabalho dele.
+   */
+  4: (save) => {
+    const industries = (save.industries ?? {}) as Record<string, RawSave>
+    for (const industry of Object.values(industries)) {
+      if (typeof industry.trendSize !== 'number') industry.trendSize = industry.marketSize
+    }
+
+    const companies = (save.companies ?? {}) as Record<string, RawSave>
+    for (const company of Object.values(companies)) {
+      const definition = INDUSTRIES.find((item) => item.id === company.industryId)
+      if (!company.workforce && definition) {
+        const revenue = typeof company.revenue === 'number' ? company.revenue : 0
+        const headcount = Math.max(1, Math.round(revenue / definition.outputPerEmployee))
+        company.workforce = {
+          headcount,
+          avgSalary: (revenue * definition.payrollRatio) / headcount,
+          productivity: 100,
+          morale: 70,
+        }
+      }
+      delete company.employees
+      if (typeof company.price !== 'number' || company.price <= 0) company.price = 1
+      if (typeof company.capitalStock !== 'number' && definition) {
+        const revenue = typeof company.revenue === 'number' ? company.revenue : 0
+        company.capitalStock = revenue / definition.capitalTurnover
+      }
+    }
+
+    save.saveVersion = 5
     return save
   },
 }

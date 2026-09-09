@@ -13,6 +13,9 @@ import { applyAction } from '@/engine/actions'
 import { runDays } from '@/engine/autoplay'
 import type { GameState } from '@/engine/types'
 import { findJob } from '@/data/jobs'
+import { findIndustry } from '@/data/industries'
+import { valuationOf } from '@/engine/companies'
+import { sectorMultiple } from '@/engine/market'
 import { decideActions, getStrategy, STRATEGY_IDS, type StrategyId } from './strategies'
 
 interface Options {
@@ -51,6 +54,7 @@ const COLUMNS = [
   'money',
   'bank',
   'stocks',
+  'empresa',
   'index',
   'job',
   'salary',
@@ -65,6 +69,19 @@ const COLUMNS = [
   'priceLevel',
   'unemployment',
 ] as const
+
+/** Valuation somado das empresas dirigidas pelo jogador. */
+function ownCompanyValue(state: GameState): number {
+  let total = 0
+  for (const id of state.companyOrder) {
+    const company = state.companies[id]
+    if (!company || company.managedBy !== 'player') continue
+    const industry = findIndustry(company.industryId)
+    if (!industry) continue
+    total += valuationOf(company, sectorMultiple(industry.multipleBase, state.macro.selic))
+  }
+  return total
+}
 
 function row(state: GameState): string {
   const { date, player, macro } = state
@@ -82,6 +99,7 @@ function row(state: GameState): string {
     player.money.toFixed(2),
     bankBalance(state).toFixed(2),
     portfolioValue(state).toFixed(2),
+    ownCompanyValue(state).toFixed(2),
     macro.marketIndex.toFixed(1),
     job ? job.id : '-',
     player.career.salary.toFixed(2),
@@ -143,6 +161,7 @@ function main(): void {
     `cursos ${state.player.education.length}`,
     `cargo ${state.player.currentJobId ?? '-'}`,
     `carteira ${portfolioValue(state).toFixed(0)}`,
+    `empresa ${ownCompanyValue(state).toFixed(0)}`,
     `índice ${state.macro.marketIndex.toFixed(0)}`,
     `desfecho ${state.meta.ending ?? 'em andamento'}`,
   ].join(' · ')

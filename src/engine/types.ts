@@ -335,16 +335,22 @@ export interface BankingState {
 // §5.5 Empresas
 // ---------------------------------------------------------------------------
 
-export type EmployeeRole = 'operacional' | 'vendas' | 'engenharia' | 'gestao'
-
-export interface Employee {
-  id: EntityId
-  role: EmployeeRole
-  salary: Money
-  /** Produtividade individual, 0-100. */
+/**
+ * Quadro de funcionários **agregado**.
+ *
+ * O spec §5.5 descreve funcionários individuais, mas 28 empresas com milhares de
+ * pessoas cada não cabem no save nem no orçamento do tick — e nada na mecânica
+ * distingue um operador do outro. O que importa (folha, produtividade e moral)
+ * é modelado no agregado, e vale igual para a empresa do jogador e para a
+ * concorrente: uma engenharia só, como a §5.5 exige.
+ */
+export interface Workforce {
+  headcount: number
+  /** Salário anual médio, nominal. */
+  avgSalary: Money
+  /** 0-100. Cai com carga excessiva, sobe com salário acima do mercado. */
   productivity: number
   morale: number
-  hiredDayIndex: number
 }
 
 export interface OwnershipEntry {
@@ -397,7 +403,7 @@ export interface Company {
   lastQuarterProfit: Money
   /** Últimos 8 trimestres de lucro, do mais recente para o mais antigo. */
   profitHistory: Money[]
-  employees: Employee[]
+  workforce: Workforce
   productQuality: number
   brandAwareness: number
   rndLevel: number
@@ -417,6 +423,13 @@ export interface Company {
   capacity: number
   /** Margem operacional de referência da empresa, antes do efeito do ciclo. */
   baseMargin: number
+  /**
+   * Capital instalado (imobilizado). Junto com o quadro, é o que limita a
+   * capacidade: gente sem máquina não produz. É o freio que faz expandir custar
+   * caro — sem ele, contratar tinha retorno praticamente infinito e a empresa
+   * do jogador passava de R$ 120 mil a R$ 8 bilhões de receita em cinco anos.
+   */
+  capitalStock: Money
   /** Participação no setor, derivada de atratividade relativa (C4). */
   marketShare: Ratio
   status: CompanyStatus
@@ -433,6 +446,12 @@ export interface IndustryState {
   industryId: string
   /** Receita anual agregada do setor, em BRL nominal. */
   marketSize: Money
+  /**
+   * Tendência para a qual `marketSize` volta. Eventos de setor multiplicam o
+   * tamanho corrente; sem um eixo de retorno, 47 anos de choques acumulados
+   * levariam o setor a zero ou ao infinito.
+   */
+  trendSize: Money
   /** Preço médio praticado, usado na elasticidade (C4). */
   averagePrice: number
   /** Alíquota vigente, deslocável por política aprovada. */
@@ -1088,7 +1107,7 @@ export type GameAction =
   | { kind: 'ajustarPreco'; companyId: EntityId; price: number }
   | { kind: 'ajustarMarketing'; companyId: EntityId; ratio: Ratio }
   | { kind: 'investirPeD'; companyId: EntityId; ratio: Ratio }
-  | { kind: 'contratar'; companyId: EntityId; role: EmployeeRole; count: number; salary: Money }
+  | { kind: 'contratar'; companyId: EntityId; count: number; salary: Money }
   | { kind: 'demitir'; companyId: EntityId; employeeId: EntityId }
   | { kind: 'demissaoEmMassa'; companyId: EntityId; count: number }
   | { kind: 'expandirCapacidade'; companyId: EntityId; investment: Money }

@@ -26,6 +26,10 @@ import {
 } from './banking'
 import { findBank } from '../data/banks'
 import { findOutlet } from '../data/newsOutlets'
+import { findIndustry } from '../data/industries'
+import { OPERATIONS } from '../data/config'
+import { valuationOf } from './companies'
+import { sectorMultiple } from './market'
 import { BANKING } from '../data/config'
 import { fillBuy, fillSell } from './market'
 
@@ -377,6 +381,255 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         debit(draft, total)
         draft.market.taxDebts.splice(index, 1)
         log.push(entry('bom', 'Imposto quitado.', -total))
+        return
+      }
+
+      case 'fundarEmpresa': {
+        const industry = findIndustry(action.industryId)
+        if (!industry) {
+          log.push(entry('ruim', 'Setor desconhecido.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        const minimum = nominal(draft.macro, OPERATIONS.minFoundingCapital)
+        if (action.capital < minimum) {
+          log.push(entry('ruim', `Capital mínimo é ${Math.round(minimum)}.`))
+          return
+        }
+        if (availableCash(state) < action.capital) {
+          log.push(entry('ruim', 'Dinheiro insuficiente.'))
+          return
+        }
+
+        debit(draft, action.capital)
+        player.blocksUsedToday += 1
+
+        const id = `own-${draft.date.dayIndex}-${draft.meta.companiesFoundedCount}`
+        const headcount = OPERATIONS.foundingHeadcount
+        const salary = industry.outputPerEmployee * industry.payrollRatio * draft.macro.priceLevel
+
+        draft.companies[id] = {
+          id,
+          name: action.name,
+          industryId: industry.id,
+          isPublic: false,
+          founded: draft.date,
+          cash: action.capital,
+          debt: 0,
+          revenue: 0,
+          costs: 0,
+          lastQuarterProfit: 0,
+          profitHistory: [],
+          workforce: { headcount, avgSalary: salary, productivity: 100, morale: 70 },
+          productQuality: OPERATIONS.foundingQuality,
+          brandAwareness: OPERATIONS.foundingBrand,
+          rndLevel: 1,
+          rndProgress: 0,
+          price: 1,
+          marketingSpend: 0,
+          ownership: [{ holderId: 'player', shares: 1_000_000 }],
+          stock: null,
+          reputation: 50,
+          directives: {
+            price: 1,
+            marketingRatio: 0.05,
+            rndRatio: 0.03,
+            headcountTarget: headcount,
+            payoutRatio: 0,
+            cashReserveTarget: 0.2,
+            minMargin: 0.05,
+          },
+          capacity: 0,
+          baseMargin: industry.baseMargin,
+          // O capital fundador é o que limita a produção no primeiro dia.
+          capitalStock: action.capital,
+          marketShare: 0,
+          status: 'ativa',
+          quartersNegativeCash: 0,
+          quartersInRj: 0,
+          managedBy: 'player',
+          quartersReported: 0,
+        }
+        draft.companyOrder.push(id)
+        draft.industries[industry.id]?.companyOrder.push(id)
+        draft.meta.companiesFoundedCount += 1
+
+        log.push(entry('bom', `${action.name} fundada.`, -action.capital))
+        return
+      }
+
+      case 'ajustarPreco':
+      case 'ajustarMarketing':
+      case 'investirPeD': {
+        const company = draft.companies[action.companyId]
+        if (!company || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        // Diretriz é persistente (resolução C2): o bloco é cobrado ao mudar, não
+        // todo dia para manter a empresa funcionando.
+        player.blocksUsedToday += 1
+
+        if (action.kind === 'ajustarPreco') {
+          const price = clamp(action.price, 0.3, 3)
+          company.price = price
+          company.directives.price = price
+          log.push(entry('info', `Preço de ${company.name} ajustado.`))
+        } else if (action.kind === 'ajustarMarketing') {
+          company.directives.marketingRatio = clamp(action.ratio, 0, 0.35)
+          log.push(entry('info', `Marketing de ${company.name} ajustado.`))
+        } else {
+          company.directives.rndRatio = clamp(action.ratio, 0, 0.35)
+          log.push(entry('info', `P&D de ${company.name} ajustado.`))
+        }
+        return
+      }
+
+      case 'contratar': {
+        const company = draft.companies[action.companyId]
+        if (!company || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        if (action.count <= 0 || action.salary <= 0) {
+          log.push(entry('ruim', 'Contratação inválida.'))
+          return
+        }
+        // Custo de contratação: um mês de salário adiantado por cabeça.
+        const cost = (action.salary / 12) * action.count
+        if (company.cash < cost) {
+          log.push(entry('ruim', 'A empresa não tem caixa para contratar.'))
+          return
+        }
+        player.blocksUsedToday += 1
+        company.cash -= cost
+
+        const total = company.workforce.headcount + action.count
+        company.workforce.avgSalary =
+          (company.workforce.avgSalary * company.workforce.headcount + action.salary * action.count) /
+          total
+        company.workforce.headcount = total
+        company.directives.headcountTarget = total
+        log.push(entry('info', `${action.count} contratados em ${company.name}.`, -cost))
+        return
+      }
+
+      case 'demitir':
+      case 'demissaoEmMassa': {
+        const company = draft.companies[action.companyId]
+        if (!company || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        const count = action.kind === 'demissaoEmMassa' ? action.count : 1
+        if (count <= 0 || company.workforce.headcount <= count) {
+          log.push(entry('ruim', 'Não há gente suficiente para demitir.'))
+          return
+        }
+        player.blocksUsedToday += 1
+
+        // Rescisão custa caixa e moral. Demissão em massa ainda derruba a
+        // reputação — e, a partir da Fase 4, vira notícia.
+        const severance = (company.workforce.avgSalary / 12) * count * 2
+        company.cash -= severance
+        company.workforce.headcount -= count
+        company.directives.headcountTarget = company.workforce.headcount
+
+        const massRatio = count / (company.workforce.headcount + count)
+        company.workforce.morale = clamp(
+          company.workforce.morale - OPERATIONS.layoffMoraleHit * Math.max(0.2, massRatio * 3),
+          0,
+          100,
+        )
+        if (action.kind === 'demissaoEmMassa') {
+          company.reputation = clamp(company.reputation - OPERATIONS.layoffReputationHit, 0, 100)
+        }
+        log.push(entry('ruim', `${count} demitidos em ${company.name}.`, -severance))
+        return
+      }
+
+      case 'expandirCapacidade': {
+        const company = draft.companies[action.companyId]
+        if (!company || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        if (action.investment <= 0 || company.cash < action.investment) {
+          log.push(entry('ruim', 'A empresa não tem caixa para isso.'))
+          return
+        }
+        player.blocksUsedToday += 1
+        company.cash -= action.investment
+
+        company.capitalStock += action.investment
+        log.push(entry('info', `Capacidade de ${company.name} ampliada.`, -action.investment))
+        return
+      }
+
+      case 'emprestimoEmpresarial': {
+        const company = draft.companies[action.companyId]
+        const bank = findBank(action.bankId)
+        if (!company || company.managedBy !== 'player' || !bank) {
+          log.push(entry('ruim', 'Operação indisponível.'))
+          return
+        }
+        // Crédito empresarial olha a receita da empresa, não o salário do dono.
+        const limit = Math.max(0, company.revenue * 0.5 - company.debt)
+        if (action.amount <= 0 || action.amount > limit) {
+          log.push(entry('ruim', 'Acima do limite de crédito da empresa.'))
+          return
+        }
+        company.cash += action.amount
+        company.debt += action.amount
+        log.push(entry('info', `Capital de giro para ${company.name}.`, action.amount))
+        return
+      }
+
+      case 'venderEmpresa': {
+        const company = draft.companies[action.companyId]
+        const industry = company ? findIndustry(company.industryId) : null
+        if (!company || !industry || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        player.blocksUsedToday += 1
+
+        const multiple = sectorMultiple(industry.multipleBase, draft.macro.selic)
+        const price = valuationOf(company, multiple)
+        player.money += price
+        company.status = 'fechada'
+        company.managedBy = 'ai'
+        company.ownership = [{ holderId: 'float', shares: 0 }]
+
+        draft.companyOrder = draft.companyOrder.filter((id) => id !== company.id)
+        const industryState = draft.industries[company.industryId]
+        if (industryState) {
+          industryState.companyOrder = industryState.companyOrder.filter((id) => id !== company.id)
+        }
+        log.push(entry('bom', `${company.name} vendida.`, price))
         return
       }
 

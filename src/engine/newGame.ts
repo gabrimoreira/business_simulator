@@ -18,7 +18,7 @@ import { createRng, range } from './rng'
 import { INDUSTRIES } from '../data/industries'
 import { COMPANY_SEEDS } from '../data/companies.seed'
 import { NEWS_OUTLETS } from '../data/newsOutlets'
-import { COMPANY_OPS } from '../data/config'
+import { COMPANY_OPS, OPERATIONS } from '../data/config'
 import { fairValue } from './market'
 import {
   ACTION_BLOCKS_PER_DAY,
@@ -128,6 +128,7 @@ export function seedWorld(state: GameState): void {
     industries[industry.id] = {
       industryId: industry.id,
       marketSize: industry.marketSize,
+      trendSize: industry.marketSize,
       averagePrice: 1,
       taxRate: industry.taxRate,
       subsidyRatio: 0,
@@ -166,11 +167,20 @@ export function seedWorld(state: GameState): void {
       lastQuarterProfit: 0,
       // Quatro trimestres fechados para que o valor justo exista no dia 1.
       profitHistory: [quarter, quarter, quarter, quarter],
-      employees: [],
+      workforce: {
+        headcount: Math.max(1, Math.round(seed.revenue / industry.outputPerEmployee)),
+        avgSalary: (seed.revenue * industry.payrollRatio) /
+          Math.max(1, Math.round(seed.revenue / industry.outputPerEmployee)),
+        productivity: 100,
+        morale: 70,
+      },
+      // Calibrados logo abaixo, por setor, para reproduzir as participações da
+      // seed.
       productQuality: 50,
       brandAwareness: 50,
       rndLevel: 1,
       rndProgress: 0,
+      /** Preço do produto como índice: 1,0 é a referência do setor. */
       price: 1,
       marketingSpend: 0,
       ownership: [
@@ -203,6 +213,7 @@ export function seedWorld(state: GameState): void {
       },
       capacity: seed.revenue,
       baseMargin: seed.margin,
+      capitalStock: seed.revenue / industry.capitalTurnover,
       marketShare: 0,
       status: 'ativa',
       quartersNegativeCash: 0,
@@ -221,13 +232,39 @@ export function seedWorld(state: GameState): void {
     industries[seed.industryId]?.companyOrder.push(seed.id)
   }
 
-  // Participação de mercado inicial, por receita dentro do setor.
+  // Qualidade e marca são **derivadas** das participações da seed, não
+  // inventadas. A receita de cada empresa em `companies.seed.ts` é o dado
+  // calibrado (é ela que sustenta o preço da ação da Fase 3); qualidade e marca
+  // são o que a engine de participação precisa para reproduzir aquela receita
+  // no primeiro dia. Fixá-las a esmo fazia o setor inteiro se reorganizar no
+  // primeiro ano e quebrar 26 das 28 empresas em dez anos.
   for (const industryId of industryOrder) {
     const ids = industries[industryId]?.companyOrder ?? []
     const total = ids.reduce((sum, id) => sum + (companies[id]?.revenue ?? 0), 0)
+    if (total <= 0) continue
+
+    // Atratividade média-alvo do setor; a de cada empresa sai da fatia dela.
+    const targetSum = ids.length * 0.5
+
     for (const id of ids) {
       const company = companies[id]
-      if (company && total > 0) company.marketShare = company.revenue / total
+      if (!company) continue
+      const share = company.revenue / total
+      company.marketShare = share
+
+      const target = share * targetSum
+      // Qualidade vem da reputação; a marca fecha a conta, invertendo a fórmula
+      // de atratividade a preço de referência.
+      const qualityNorm = 0.35 + (company.reputation / 100) * 0.45
+      const qualityTerm =
+        OPERATIONS.qualityBase + OPERATIONS.qualityWeight * qualityNorm ** OPERATIONS.qualityExponent
+      const brandNorm = Math.min(
+        1,
+        Math.max(0.02, (target / qualityTerm) ** (1 / OPERATIONS.brandExponent)),
+      )
+
+      company.productQuality = qualityNorm * 100
+      company.brandAwareness = brandNorm * 100
     }
   }
 

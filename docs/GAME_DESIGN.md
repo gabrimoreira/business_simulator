@@ -681,6 +681,36 @@ para isso que o object store `history` existe.
 recente é sempre do dia — o feed não morre com o tempo, que era o defeito da
 primeira versão.
 
+### Ajustes da Fase 5
+
+A fase trocou o resultado exógeno pela disputa de participação (C4). Sete
+correções, quase todas achadas rodando dez anos e olhando quem morreu:
+
+| O que estava errado | Sintoma | Correção |
+|---|---|---|
+| Moral entrava na capacidade **e** na produtividade | laço moral → capacidade → sobrecarga → moral; 26 de 28 empresas mortas em 10 anos | capacidade só olha produtividade |
+| Penalidade de sobrecarga sem teto | empresa nova, sempre com mais demanda que capacidade, ficava com moral zero para sempre | satura em 1× a capacidade |
+| Salário nominal congelado | mercado sobe com a inflação, empresa não reajusta, equipe some em uma década | dissídio automático pela inflação |
+| Marca e qualidade com decaimento absoluto | todo mundo saturava em 100 e a diferenciação sumia | depreciação proporcional: o nível de equilíbrio vira função da intensidade do gasto |
+| Marca medida contra o setor | startup nunca saía de zero: comprar alcance nacional é impossível para quem fatura 200 mil | marca também cresce por **utilização da própria capacidade** |
+| Qualidade medida contra o setor | oficina pequena não conseguia ser boa | qualidade é **intensidade** de P&D sobre a própria receita |
+| Atratividade aditiva | o termo de preço dava piso a quem ninguém conhece: empresa de 1 funcionário levava 13% do setor e a venda sumia | atratividade **multiplicativa na marca** |
+| Participação alocada, não realizada | mesma empresa "ganhava" 16% de um setor de bilhões vendendo 274 mil | participação passa a ser a realizada, e a demanda não atendida vai para quem tem capacidade |
+| Sem capital instalado | contratar rendia quase infinito: R$ 120 mil viravam R$ 8,6 bi de receita em 5 anos | `capitalStock` limita a capacidade junto com o quadro; giro do ativo por setor |
+
+**A curva do empreendedor, medida:** o `entrepreneur` funda por volta do **ano
+25** e fecha os 47 anos com **R$ 590 mil reais**, contra R$ 1,19 M do `passive`.
+Isso reprova o §2.1 duas vezes: a fundação era prevista para o ano 4–6 e o
+patrimônio final para a faixa de R$ 60–500 M.
+
+O diagnóstico é claro e não é do motor: **um atendente não junta R$ 60 mil
+reais**. O excedente dele é de ~R$ 220/mês, e a inflação come o caixa parado. A
+estratégia do runner só consegue fundar depois de terminar a graduação e virar
+analista — vinte e cinco anos depois. O caminho que falta é o que o próprio spec
+já tem e a Fase 5 não conectou: **fundar com empréstimo**. O limite de crédito de
+8× a renda mensal no Meridiano dá exatamente a ordem de grandeza do capital
+mínimo. É a primeira coisa a fazer antes de mexer em qualquer constante.
+
 ### O que a Fase 3 mediu, e o que ficou em aberto
 
 Aos 65 anos, em três seeds:

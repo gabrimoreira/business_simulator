@@ -7,7 +7,7 @@
  */
 
 /** Versão do formato de save. Incrementar exige uma migration (§3.5). */
-export const SAVE_VERSION = 4
+export const SAVE_VERSION = 5
 
 // --- Tempo (GAME_DESIGN §3.1) ----------------------------------------------
 
@@ -354,4 +354,99 @@ export const NEWS = {
   minPriorityByReach: 3,
   /** Dia do mês em que a assinatura premium é cobrada. */
   subscriptionDay: 1,
+} as const
+
+// --- Operação de empresas (GAME_DESIGN C4) ---------------------------------
+
+export const OPERATIONS = {
+  /**
+   * Atratividade (spec §5.5, resolvido em C4):
+   *
+   *   A = marca^0,8 × (0,55 + 0,45·qualidade^0,9) × fatorPreço^0,6
+   *
+   * **Multiplicativa na marca**, não aditiva. Na forma aditiva o termo de preço
+   * dava um piso de atratividade a quem ninguém conhece: uma empresa recém
+   * fundada, de um funcionário, levava 13% do setor só por cobrar o preço médio
+   * — e como não tinha capacidade para atender, a venda simplesmente sumia do
+   * setor. Sem alcance não há fatia; qualidade e preço modulam o que a marca
+   * abre.
+   */
+  brandExponent: 0.8,
+  qualityBase: 0.55,
+  qualityWeight: 0.45,
+  qualityExponent: 0.9,
+  priceExponent: 0.6,
+  /** Elasticidade: quanto a atratividade responde a preço abaixo da média. */
+  priceElasticity: 1.6,
+  /** Teto do fator de preço, para não haver share infinito a preço zero. */
+  priceFactorCap: 3,
+
+  /** Retorno do tamanho do setor à tendência, por dia. */
+  marketSizeReversion: 0.004,
+
+  /**
+   * Marca e qualidade são **estoques com depreciação proporcional**: perder 1
+   * ponto por dia de forma absoluta fazia todo mundo saturar em 100 e a
+   * diferenciação sumir. Com depreciação percentual, o nível de equilíbrio é
+   * ditado pela intensidade do gasto — e quem para de gastar volta a zero.
+   */
+  brandDecayRate: 0.00045,
+  qualityDecayRate: 0.00025,
+  /**
+   * Ganho por real gasto, relativo à receita diária do setor. Calibrado para
+   * que gastar o padrão do setor **mantenha** marca e qualidade: gastar mais
+   * cresce, gastar menos erode. Com os valores antigos todo mundo saturava em
+   * 100 no segundo ano e a diferenciação sumia.
+   */
+  /** Marca comprada: gasto de marketing sobre o tamanho diário do setor. */
+  brandGainPerRatio: 2.5,
+  /**
+   * Marca conquistada: quem entrega tudo o que produz fica conhecido. Depende da
+   * **utilização da própria capacidade**, não da fatia do setor — é o que
+   * permite uma empresa nova sair de zero sem precisar comprar alcance nacional,
+   * e é o teto natural dela: alcance de bairro, não de país.
+   */
+  brandGainPerUtilization: 0.02,
+  /**
+   * Qualidade é **intensidade**, não escala: depende da fração da receita posta
+   * em P&D, não do tamanho da empresa. Uma oficina de dez pessoas pode fazer o
+   * melhor produto do setor; medir P&D contra o setor inteiro tornava isso
+   * impossível.
+   */
+  qualityGainPerRndRatio: 0.75,
+
+  /** Moral e produtividade. Peso aplicado à folga salarial: 10% acima do
+   *  mercado vale 4 pontos de moral. */
+  moraleSalaryWeight: 40,
+  moraleOverloadWeight: 15,
+  moraleSpeed: 0.02,
+  productivitySpeed: 0.01,
+  /**
+   * Depreciação anual do capital instalado — vida útil de ~20 anos. Com 8% ela
+   * comia todo o lucro reinvestido de uma empresa pequena e o crescimento ficava
+   * em zero.
+   */
+  capitalDepreciation: 0.05,
+  /** Fração do lucro que a empresa dirigida pela IA reinveste em capital. */
+  aiReinvestRatio: 0.5,
+  productivityMax: 160,
+
+  /** Demissão em massa: efeito em moral e reputação. */
+  layoffMoraleHit: 18,
+  layoffReputationHit: 10,
+
+  /** Ajuste diário do quadro em direção ao alvo da diretriz. */
+  headcountAdjustSpeed: 0.006,
+
+  /** Fundação: capital mínimo e quadro inicial. */
+  minFoundingCapital: 50_000,
+  foundingHeadcount: 1,
+  foundingQuality: 30,
+  foundingBrand: 2,
+
+  /** Venda da empresa: descontos sobre o valuation. */
+  saleDebtDiscount: 1,
+  saleReputationWeight: 0.3,
+  /** Piso do valuation como fração da receita anual. */
+  saleRevenueFloor: 0.2,
 } as const
