@@ -53,7 +53,14 @@ export default defineConfig({
     environment: 'node',
     // Os testes de sanidade simulam 10 anos de jogo com a bolsa rodando; o
     // default de 5s não cabe uma década.
-    testTimeout: 180_000,
+    testTimeout: 300_000,
+    // Um teste de dez anos é um laço de CPU puro: enquanto ele roda, o worker
+    // não processa a resposta do `onTaskUpdate` que já mandou ao reporter, e o
+    // timer de 5s do birpc dispara antes da mensagem ser lida. Resultado: 241
+    // testes verdes e `exit 1`. Metade dos núcleos reduziu de 6 erros para 3 —
+    // não resolve, porque o timeout do birpc não é exposto na config. A cura é
+    // nenhum corpo de teste bloquear por minutos; está anotado no §7 da Fase 8.
+    maxWorkers: 4,
     include: ['tests/**/*.spec.ts'],
     setupFiles: ['tests/setup.ts'],
   },

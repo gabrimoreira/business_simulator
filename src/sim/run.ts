@@ -164,6 +164,8 @@ function main(): void {
     `empresa ${ownCompanyValue(state).toFixed(0)}`,
     `índice ${state.macro.marketIndex.toFixed(0)}`,
     `desfecho ${state.meta.ending ?? 'em andamento'}`,
+    `idade ${state.player.age}`,
+    `manchete "${state.news.headlines.find((h) => h.id.startsWith('hl-fim-'))?.text ?? '—'}"`,
   ].join(' · ')
   process.stderr.write(`\n${summary}\n`)
 }

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import BankCard from '@/components/BankCard.vue'
 import PoliticsPanel from '@/components/PoliticsPanel.vue'
 import ScreenTitle from '@/components/ScreenTitle.vue'
 import { useGameStore } from '@/stores/game'
-import { formatMoney, formatPercent } from '@/lib/format'
+import { formatMoney, formatMoneyCompact, formatPercent } from '@/lib/format'
 import { BANKS, findBank } from '@/data/banks'
+import { ASSETS } from '@/data/assets'
 
 const game = useGameStore()
 const macro = computed(() => game.state?.macro ?? null)
@@ -21,6 +22,8 @@ const loans = computed(() => game.state?.banking.loans ?? [])
 const cards = computed(() => game.state?.banking.cards ?? [])
 const score = computed(() => game.state?.player.creditScore ?? 0)
 const playerOffice = computed(() => game.state?.player.office ?? null)
+const owned = computed(() => game.state?.personalAssets.assets ?? [])
+const shopping = ref(false)
 
 function bankName(id: string): string {
   return findBank(id)?.name ?? id
@@ -127,6 +130,71 @@ function payoff(loanId: string, amount: number): void {
             {{ formatPercent(card.revolvingMonthlyRate, 0) }} ao mês
           </p>
         </div>
+      </div>
+    </section>
+
+    <section class="px-4 pt-4">
+      <h2 class="pb-2 text-sm font-medium text-muted">Bens</h2>
+      <div v-if="owned.length" class="mb-2 flex flex-col gap-2">
+        <div
+          v-for="asset in owned"
+          :key="asset.id"
+          class="rounded-xl border border-line bg-surface p-3"
+        >
+          <div class="flex items-baseline justify-between gap-3">
+            <p class="text-sm font-medium">
+              {{ asset.name }}
+              <span v-if="asset.isResidence" class="text-[11px] text-accent">· você mora aqui</span>
+            </p>
+            <p class="tnum text-sm">{{ formatMoneyCompact(asset.currentValue) }}</p>
+          </div>
+          <p class="tnum text-[11px] text-muted">
+            comprado por {{ formatMoneyCompact(asset.purchasePrice) }}
+            <span v-if="asset.monthlyIncome > 0 && !asset.isResidence">
+              · aluga por {{ formatMoney(asset.monthlyIncome) }}/mês
+            </span>
+          </p>
+          <div class="mt-2 grid grid-cols-2 gap-2">
+            <button
+              v-if="asset.kind === 'imovel' && !asset.isResidence"
+              class="min-h-[36px] rounded-lg border border-line text-xs"
+              @click="game.dispatch({ kind: 'mudarResidencia', id: asset.id })"
+            >
+              Morar aqui
+            </button>
+            <button
+              class="min-h-[36px] rounded-lg border border-line text-xs text-muted"
+              @click="game.dispatch({ kind: 'venderAtivo', id: asset.id })"
+            >
+              Vender
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button class="text-[11px] text-accent" @click="shopping = !shopping">
+        {{ shopping ? 'fechar catálogo' : 'Comprar bens' }}
+      </button>
+
+      <div v-if="shopping" class="mt-2 overflow-hidden rounded-2xl border border-line bg-surface">
+        <button
+          v-for="asset in ASSETS"
+          :key="asset.id"
+          class="flex w-full items-center justify-between gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 disabled:opacity-30"
+          :disabled="(game.state?.player.money ?? 0) < asset.price * (game.state?.macro.priceLevel ?? 1)"
+          @click="game.dispatch({ kind: 'comprarAtivo', assetId: asset.id, financed: false })"
+        >
+          <div class="min-w-0">
+            <p class="truncate text-sm">{{ asset.name }}</p>
+            <p class="text-[11px] text-muted">
+              +{{ asset.moodBonus }} humor
+              <span v-if="asset.notorietyCost > 0">· +{{ asset.notorietyCost }} notoriedade</span>
+            </p>
+          </div>
+          <p class="tnum shrink-0 text-sm">
+            {{ formatMoneyCompact(asset.price * (game.state?.macro.priceLevel ?? 1)) }}
+          </p>
+        </button>
       </div>
     </section>
 

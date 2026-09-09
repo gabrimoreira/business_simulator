@@ -3,17 +3,25 @@
  * `localStorage` é proibido para estado de jogo (CLAUDE.md §6).
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import type { Candle, EntityId, GameState } from '@/engine/types'
+import type { Candle, EntityId, GameState, RunResult, StartArchetype } from '@/engine/types'
 import { migrate } from './migrations'
 import { toJson } from './serialize'
 
 const DB_NAME = 'capital'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const SAVE_KEY = 'current'
+
+/** O que sobrevive a apagar a partida: é isso que faz o New Game+ existir. */
+export interface PersistentMeta {
+  ranking: RunResult[]
+  unlockedArchetypes: StartArchetype[]
+}
 
 interface CapitalDB extends DBSchema {
   /** Estado do jogo, uma única entrada. */
   save: { key: string; value: string }
+  /** Ranking e desbloqueios; **não** são apagados com a partida. */
+  meta: { key: string; value: PersistentMeta }
   /** Séries de preço por ativo, fora do save para não inflar o estado. */
   history: { key: EntityId; value: { companyId: EntityId; candles: Candle[] } }
 }
@@ -27,6 +35,7 @@ function getDb(): Promise<IDBPDatabase<CapitalDB>> {
       if (!db.objectStoreNames.contains('history')) {
         db.createObjectStore('history', { keyPath: 'companyId' })
       }
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
     },
   })
   return dbPromise
@@ -45,10 +54,25 @@ export async function loadState(): Promise<GameState | null> {
   return migrate(JSON.parse(json))
 }
 
+/**
+ * Apaga a partida — e **só** a partida. Ranking e arquétipos desbloqueados
+ * ficam: sem isso o New Game+ não existiria, porque o prêmio da corrida
+ * anterior seria apagado junto com ela.
+ */
 export async function clearSave(): Promise<void> {
   const db = await getDb()
   await db.delete('save', SAVE_KEY)
   await db.clear('history')
+}
+
+export async function saveMeta(meta: PersistentMeta): Promise<void> {
+  const db = await getDb()
+  await db.put('meta', meta, SAVE_KEY)
+}
+
+export async function loadMeta(): Promise<PersistentMeta | null> {
+  const db = await getDb()
+  return (await db.get('meta', SAVE_KEY)) ?? null
 }
 
 export async function putHistory(companyId: EntityId, candles: Candle[]): Promise<void> {

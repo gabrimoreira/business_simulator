@@ -72,16 +72,22 @@ export function availableCash(state: GameState): number {
  */
 export function debit(draft: GameState, amount: number): number {
   let remaining = amount
-  const fromCash = Math.min(draft.player.money, remaining)
-  draft.player.money -= fromCash
-  remaining -= fromCash
 
+  // **Conta corrente primeiro, caixa depois.** Ninguém paga o aluguel com o
+  // dinheiro do almoço: com a ordem invertida, as contas do mês esvaziavam o
+  // caixa e o jogador ficava sem o que comer com saldo no banco — o `pricewar`
+  // atravessou dez anos com saúde média de 6,8 por causa disso.
   for (const account of draft.banking.accounts) {
     if (remaining <= 0) break
     const fromChecking = Math.min(account.checking, remaining)
     account.checking -= fromChecking
     remaining -= fromChecking
   }
+
+  const fromCash = Math.min(draft.player.money, remaining)
+  draft.player.money -= fromCash
+  remaining -= fromCash
+
   return remaining
 }
 

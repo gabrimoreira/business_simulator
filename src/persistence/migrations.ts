@@ -268,6 +268,27 @@ export const MIGRATIONS: Record<number, Migration> = {
     save.saveVersion = 9
     return save
   },
+
+  /**
+   * 9 → 10: a Fase 8 trouxe os bens pessoais. Saves anteriores não têm a
+   * estrutura, e o passo do jogador leria `undefined` na primeira virada de mês.
+   */
+  9: (save) => {
+    const assets = (save.personalAssets ?? {}) as RawSave
+    if (!Array.isArray(assets.assets)) assets.assets = []
+    if (assets.residenceId === undefined) assets.residenceId = null
+    if (typeof assets.monthlyRent !== 'number') assets.monthlyRent = 550
+    save.personalAssets = assets
+
+    const meta = (save.meta ?? {}) as RawSave
+    if (!Array.isArray(meta.ranking)) meta.ranking = []
+    if (!Array.isArray(meta.unlockedArchetypes)) meta.unlockedArchetypes = ['comum']
+    if (!Array.isArray(meta.officesHeld)) meta.officesHeld = []
+    save.meta = meta
+
+    save.saveVersion = 10
+    return save
+  },
 }
 
 export class SaveTooNewError extends Error {

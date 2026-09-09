@@ -12,7 +12,14 @@ import { findMeal } from '../data/living'
 import { findJob } from '../data/jobs'
 import { findCourse } from '../data/courses'
 import { chance } from './rng'
-import { clamp, hireChance, jobEligibility, performanceGain, workEnergyCost } from './player'
+import {
+  clamp,
+  finishRun,
+  hireChance,
+  jobEligibility,
+  performanceGain,
+  workEnergyCost,
+} from './player'
 import { nominal } from './macro'
 import {
   amortizingPayment,
@@ -26,6 +33,8 @@ import {
 } from './banking'
 import { findBank } from '../data/banks'
 import { findOutlet } from '../data/newsOutlets'
+import { findAsset } from '../data/assets'
+import { ASSETS_CONFIG } from '../data/config'
 import { findIndustry } from '../data/industries'
 import { CONTROL, OPERATIONS, POLITICS } from '../data/config'
 import { findPolicyDef } from '../data/policies'
@@ -1134,6 +1143,94 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
           eventId: null,
         })
         log.push(entry('bom', `Você foi eleito ${action.office}.`, -action.campaignSpend))
+        return
+      }
+
+      case 'comprarAtivo': {
+        const definition = findAsset(action.assetId)
+        if (!definition) {
+          log.push(entry('ruim', 'Bem desconhecido.'))
+          return
+        }
+        const price = nominal(draft.macro, definition.price)
+        if (availableCash(state) < price) {
+          log.push(entry('ruim', 'Dinheiro insuficiente.'))
+          return
+        }
+        debit(draft, price)
+
+        const id = `own-${definition.id}-${draft.date.dayIndex}`
+        draft.personalAssets.assets.push({
+          id,
+          assetId: definition.id,
+          kind: definition.kind,
+          name: definition.name,
+          purchasePrice: price,
+          currentValue: price,
+          purchasedDayIndex: draft.date.dayIndex,
+          monthlyIncome: nominal(draft.macro, definition.monthlyIncome),
+          annualValueChange: definition.annualValueChange,
+          moodBonus: definition.moodBonus,
+          reputationBonus: definition.reputationBonus,
+          notorietyCost: definition.notorietyCost,
+          pledgedToLoanId: null,
+          isResidence: false,
+        })
+
+        player.mood = clampVital(player.mood + definition.moodBonus)
+        player.publicReputation = clamp(
+          player.publicReputation + definition.reputationBonus,
+          -100,
+          100,
+        )
+        log.push(entry('bom', `${definition.name} comprado.`, -price))
+        return
+      }
+
+      case 'venderAtivo': {
+        const index = draft.personalAssets.assets.findIndex((asset) => asset.id === action.id)
+        const asset = draft.personalAssets.assets[index]
+        if (!asset) {
+          log.push(entry('ruim', 'Você não tem esse bem.'))
+          return
+        }
+        if (asset.pledgedToLoanId) {
+          log.push(entry('ruim', 'Esse bem está dado em garantia.'))
+          return
+        }
+        // Venda fora do mercado sai com deságio: bem não é dinheiro.
+        const price = asset.currentValue * (1 - ASSETS_CONFIG.saleSpread)
+        player.money += price
+        draft.personalAssets.assets.splice(index, 1)
+        if (draft.personalAssets.residenceId === asset.id) {
+          draft.personalAssets.residenceId = null
+        }
+        log.push(entry('info', `${asset.name} vendido.`, price))
+        return
+      }
+
+      case 'mudarResidencia': {
+        if (action.id === null) {
+          draft.personalAssets.residenceId = null
+          for (const asset of draft.personalAssets.assets) asset.isResidence = false
+          log.push(entry('info', 'Você voltou a alugar.'))
+          return
+        }
+        const asset = draft.personalAssets.assets.find((item) => item.id === action.id)
+        if (!asset || asset.kind !== 'imovel') {
+          log.push(entry('ruim', 'Só dá para morar em imóvel seu.'))
+          return
+        }
+        for (const item of draft.personalAssets.assets) item.isResidence = item.id === asset.id
+        draft.personalAssets.residenceId = asset.id
+        // Morando no que é seu, o aluguel some do orçamento.
+        draft.personalAssets.monthlyRent = 0
+        log.push(entry('bom', `Você mudou para ${asset.name}.`))
+        return
+      }
+
+      case 'encerrarPartida': {
+        finishRun(draft, action.ending, log)
         return
       }
 

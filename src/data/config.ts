@@ -7,7 +7,7 @@
  */
 
 /** Versão do formato de save. Incrementar exige uma migration (§3.5). */
-export const SAVE_VERSION = 9
+export const SAVE_VERSION = 10
 
 // --- Tempo (GAME_DESIGN §3.1) ----------------------------------------------
 
@@ -668,4 +668,65 @@ export const POLITICS = {
   /** Notoriedade cobrada quando uma política aprovada beneficia sua empresa. */
   notorietyPerTailoredPolicy: 15,
   notorietyPerDonation: 3,
+} as const
+
+// --- Ativos pessoais e fim de jogo (spec §5.10 e §5.11) --------------------
+
+export const ASSETS_CONFIG = {
+  /** Fração do valor perdida ao vender por fora do mercado. */
+  saleSpread: 0.06,
+  /** Renda de aluguel só entra se o imóvel não for a residência. */
+  rentDay: 8,
+  upkeepDay: 12,
+  /** Notoriedade cobrada por dia enquanto o luxo está no nome. */
+  notorietyPerDay: 0.02,
+} as const
+
+export const ENDGAME = {
+  /** Entradas guardadas no ranking local. */
+  rankingSize: 10,
+  /** Arquétipos iniciais e o que cada um troca (New Game+). */
+  /**
+   * Cada arquétipo troca uma vantagem por uma desvantagem — sem isso o New
+   * Game+ vira só um bônus, e o jogo deixa de ser sobre escolha.
+   * O filho de político começa com contatos **e** com o fisco de olho.
+   */
+  archetypes: {
+    comum: { money: 0, charisma: 0, intelligence: 0, reputation: 0, notoriety: 0, unlockNetWorth: 0 },
+    herdeiro: {
+      money: 250_000,
+      charisma: 5,
+      intelligence: 0,
+      reputation: -10,
+      notoriety: 0,
+      unlockNetWorth: 5_000_000,
+    },
+    genio: {
+      money: 0,
+      charisma: -5,
+      intelligence: 20,
+      reputation: 0,
+      notoriety: 0,
+      unlockNetWorth: 20_000_000,
+    },
+    filhoDePolitico: {
+      money: 60_000,
+      charisma: 15,
+      intelligence: 0,
+      reputation: 15,
+      // O sobrenome abre portas e chama auditoria.
+      notoriety: 35,
+      unlockNetWorth: 50_000_000,
+    },
+  } as Record<
+    string,
+    {
+      money: number
+      charisma: number
+      intelligence: number
+      reputation: number
+      notoriety: number
+      unlockNetWorth: number
+    }
+  >,
 } as const

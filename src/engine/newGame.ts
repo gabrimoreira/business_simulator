@@ -13,6 +13,7 @@ import type {
   OwnershipEntry,
   Player,
   PublicView,
+  RunResult,
   StartArchetype,
 } from './types'
 import { createRng, range } from './rng'
@@ -23,7 +24,7 @@ import { AI_PROFILES, ARCHETYPE_BY_COMPANY } from '../data/aiProfiles'
 import { TYCOON_SEEDS } from '../data/tycoons'
 import { POLITICIAN_SEEDS } from '../data/politicians'
 import { hashId } from './rng'
-import { AI } from '../data/config'
+import { AI, ENDGAME } from '../data/config'
 import { COMPANY_OPS, OPERATIONS } from '../data/config'
 import { fairValue } from './market'
 import {
@@ -115,6 +116,8 @@ export interface NewGameOptions {
   startArchetype?: StartArchetype
   /** Epoch ms fornecido pela UI — a engine não lê o relógio (GAME_DESIGN C7). */
   now?: number
+  /** Ranking e desbloqueios herdados das partidas anteriores (New Game+). */
+  carryOver?: { ranking: RunResult[]; unlockedArchetypes: StartArchetype[] }
 }
 
 /**
@@ -496,6 +499,26 @@ export function createInitialState(options: NewGameOptions): GameState {
       companiesFoundedCount: 0,
       officesHeld: [],
     },
+  }
+
+  // New Game+: o arquétipo inicial é o prêmio da corrida anterior, com trade-off.
+  const bonus = ENDGAME.archetypes[startArchetype]
+  if (bonus) {
+    state.player.money += bonus.money
+    state.player.skills.charisma = Math.max(0, state.player.skills.charisma + bonus.charisma)
+    state.player.skills.intelligence = Math.max(
+      0,
+      state.player.skills.intelligence + bonus.intelligence,
+    )
+    state.player.publicReputation = bonus.reputation
+    state.player.notoriety = bonus.notoriety
+  }
+
+  if (options.carryOver) {
+    state.meta.ranking = options.carryOver.ranking
+    state.meta.unlockedArchetypes = options.carryOver.unlockedArchetypes.includes('comum')
+      ? options.carryOver.unlockedArchetypes
+      : ['comum', ...options.carryOver.unlockedArchetypes]
   }
 
   seedWorld(state)

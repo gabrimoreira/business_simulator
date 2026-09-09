@@ -2,17 +2,26 @@
 import { ref } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { START_AGE } from '@/data/config'
+import type { StartArchetype } from '@/engine/types'
 
 const game = useGameStore()
 const name = ref('')
 const busy = ref(false)
+const archetype = ref<StartArchetype>('comum')
+
+const ARCHETYPE_LABEL: Record<string, string> = {
+  comum: 'Comum',
+  herdeiro: 'Herdeiro',
+  genio: 'Gênio',
+  filhoDePolitico: 'Filho de político',
+}
 
 async function start(): Promise<void> {
   const trimmed = name.value.trim()
   if (!trimmed || busy.value) return
   busy.value = true
   try {
-    await game.startNewGame(trimmed)
+    await game.startNewGame(trimmed, archetype.value)
   } finally {
     busy.value = false
   }
@@ -46,6 +55,19 @@ async function start(): Promise<void> {
         autocomplete="off"
         placeholder="Como a imprensa vai te chamar"
       />
+      <div v-if="game.unlocked.length > 1" class="flex flex-wrap gap-2 pb-1">
+        <button
+          v-for="id in game.unlocked"
+          :key="id"
+          type="button"
+          class="min-h-[40px] rounded-lg border px-3 text-xs"
+          :class="archetype === id ? 'border-accent text-accent' : 'border-line text-muted'"
+          @click="archetype = id"
+        >
+          {{ ARCHETYPE_LABEL[id] ?? id }}
+        </button>
+      </div>
+
       <button
         class="min-h-[48px] rounded-xl bg-accent px-4 text-base font-semibold text-bg disabled:opacity-40"
         type="submit"

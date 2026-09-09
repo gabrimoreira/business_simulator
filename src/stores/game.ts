@@ -4,13 +4,13 @@
  */
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
-import type { DayLog, GameAction, GameState } from '@/engine/types'
+import type { DayLog, GameAction, GameState, StartArchetype } from '@/engine/types'
 import { blocksRemaining, createInitialState } from '@/engine/newGame'
 import { netWorth } from '@/engine/selectors'
 import { applyAction } from '@/engine/actions'
 import { runDays } from '@/engine/autoplay'
 import { MS_PER_GAME_DAY, OFFLINE_CAP_DAYS } from '@/data/config'
-import { clearSave, loadState, saveState } from '@/persistence/db'
+import { clearSave, loadMeta, loadState, saveMeta, saveState } from '@/persistence/db'
 import { createAutosave, type Autosave } from '@/persistence/autosave'
 import { cloneState, toJson } from '@/persistence/serialize'
 import { migrate } from '@/persistence/migrations'
@@ -43,9 +43,21 @@ export const useGameStore = defineStore('game', () => {
 
   /** Substitui o estado inteiro e agenda o autosave. Único caminho de escrita. */
   function commit(next: GameState): void {
+    const wasRunning = state.value?.meta.ending == null
     state.value = next
     ensureAutosave()
     autosave?.schedule()
+
+    // Partida encerrada: ranking e desbloqueios vão para o store que sobrevive
+    // ao "apagar partida" — é o que faz o New Game+ existir.
+    if (wasRunning && next.meta.ending) {
+      unlocked.value = next.meta.unlockedArchetypes
+      ranking.value = next.meta.ranking
+      void saveMeta({
+        ranking: next.meta.ranking,
+        unlockedArchetypes: next.meta.unlockedArchetypes,
+      })
+    }
   }
 
   /**
@@ -107,6 +119,7 @@ export const useGameStore = defineStore('game', () => {
     error.value = null
     try {
       state.value = await loadState()
+      await loadPersistentMeta()
       status.value = 'pronto'
       if (state.value) {
         ensureAutosave()
@@ -118,8 +131,30 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  async function startNewGame(playerName: string, seed = Date.now() % 2_147_483_647): Promise<void> {
-    const next = createInitialState({ seed, playerName, now: Date.now() })
+  /** Ranking e arquétipos desbloqueados, que sobrevivem entre partidas. */
+  const unlocked = ref<StartArchetype[]>(['comum'])
+  const ranking = ref<GameState['meta']['ranking']>([])
+
+  async function loadPersistentMeta(): Promise<void> {
+    const meta = await loadMeta()
+    if (!meta) return
+    unlocked.value = meta.unlockedArchetypes.length > 0 ? meta.unlockedArchetypes : ['comum']
+    ranking.value = meta.ranking
+  }
+
+  async function startNewGame(
+    playerName: string,
+    startArchetype: StartArchetype = 'comum',
+    seed = Date.now() % 2_147_483_647,
+  ): Promise<void> {
+    await loadPersistentMeta()
+    const next = createInitialState({
+      seed,
+      playerName,
+      startArchetype,
+      now: Date.now(),
+      carryOver: { ranking: ranking.value, unlockedArchetypes: unlocked.value },
+    })
     state.value = next
     ensureAutosave()
     await saveState(next)
@@ -176,6 +211,8 @@ export const useGameStore = defineStore('game', () => {
     dayLog,
     awayLog,
     awayTitle,
+    unlocked,
+    ranking,
     commit,
     dispatch,
     load,

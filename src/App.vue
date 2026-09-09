@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { RouterView } from 'vue-router'
 import AwayModal from '@/components/AwayModal.vue'
 import BottomNav from '@/components/BottomNav.vue'
+import EndScreen from '@/components/EndScreen.vue'
 import NewGamePanel from '@/components/NewGamePanel.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import { useGameStore } from '@/stores/game'
@@ -67,6 +68,7 @@ onUnmounted(() => game.stopTicker())
         <RouterView />
       </main>
       <BottomNav />
+      <EndScreen v-if="game.state?.meta.ending" />
       <AwayModal
         v-if="game.awayLog.length"
         :log="game.awayLog"

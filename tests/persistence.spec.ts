@@ -39,10 +39,11 @@ describe('serialização', () => {
 describe('migrations', () => {
   /** Desfaz na mão o que a migration N-1 → N deve refazer. */
   function migrated0(save: Record<string, unknown>): Record<string, unknown> {
-    // Volta à versão 8: sem Congresso.
-    const politics = save.politics as Record<string, unknown>
-    politics.politicians = {}
-    politics.politicianOrder = []
+    // Volta à versão 9: sem bens pessoais nem ranking.
+    delete save.personalAssets
+    const meta = save.meta as Record<string, unknown>
+    delete meta.ranking
+    delete meta.unlockedArchetypes
     return save
   }
 
@@ -52,18 +53,18 @@ describe('migrations', () => {
     // A migration mais nova (4 → 5) trocou a lista de funcionários pelo quadro
     // agregado e deu capital instalado a cada empresa. Um save da versão N-1 é
     // um save com `employees` e sem `workforce`.
-    // A migration mais nova (8 → 9) abre o Congresso. Um save da versão N-1 não
-    // tem político nenhum — e sem casa não há quem proponha, vote ou receba.
+    // A migration mais nova (9 → 10) trouxe os bens pessoais e o ranking. Sem a
+    // estrutura, o passo do jogador leria `undefined` na virada do mês.
     migrated0(legacy)
 
     const migrated = migrate(legacy)
 
     expect(migrated.saveVersion).toBe(SAVE_VERSION)
-    expect(migrated.politics.politicianOrder.length).toBeGreaterThan(0)
-    const politician = migrated.politics.politicians[migrated.politics.politicianOrder[0]!]!
-    expect(politician.name.length).toBeGreaterThan(0)
-    expect(politician.loyaltyToPlayer).toBe(0)
-    expect(Array.isArray(migrated.politics.policyOrder)).toBe(true)
+    expect(Array.isArray(migrated.personalAssets.assets)).toBe(true)
+    expect(migrated.personalAssets.residenceId).toBeNull()
+    expect(migrated.personalAssets.monthlyRent).toBeGreaterThan(0)
+    expect(migrated.meta.ranking).toEqual([])
+    expect(migrated.meta.unlockedArchetypes).toContain('comum')
   })
 
   it('percorre a cadeia inteira a partir da versão 0', () => {

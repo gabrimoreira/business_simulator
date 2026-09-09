@@ -11,12 +11,16 @@ import { INDUSTRIES } from '@/data/industries'
 import { jobEligibility } from '@/engine/player'
 import { nominal } from '@/engine/macro'
 import { fairValue } from '@/engine/market'
+import { monthlyIncome } from '@/engine/banking'
 
 /** Reserva de sobrevivência antes de gastar com matrícula: ~2 meses de custo. */
 const SURVIVAL_BUFFER = 3000
 
 /** Capital com que a estratégia empreendedora abre a empresa. */
 const FOUNDING_CAPITAL = 60_000
+
+/** Dez anos: a parcela precisa caber no salário de quem ainda não fundou. */
+const FOUNDING_LOAN_TERM_DAYS = 3650
 
 export const STRATEGY_IDS = [
   'passive',
@@ -41,6 +45,18 @@ export interface Strategy {
   investsInStocks: boolean
   /** Funda empresa quando junta capital, e reinveste o lucro dela. */
   buildsCompany: string | null
+  /**
+   * Completa o capital de fundação com crédito quando o salário não chega lá.
+   * Sem isto, quem começa como atendente **nunca** funda: R$ 60 mil reais é
+   * mais do que um cargo de entrada acumula antes da inflação comer a poupança.
+   */
+  leverageToFound: boolean
+  /**
+   * Preço praticado como fração do preço médio do setor. `null` deixa o preço
+   * onde a fundação o pôs. É o que separa o `pricewar` do `entrepreneur`:
+   * mesma empresa, margem sacrificada por participação.
+   */
+  undercut: number | null
 }
 
 const STRATEGIES: Record<StrategyId, Strategy> = {
@@ -60,6 +76,8 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     savesInBank: true,
     investsInStocks: false,
     buildsCompany: null,
+    leverageToFound: false,
+    undercut: null,
   },
   investor: {
     id: 'investor',
@@ -69,6 +87,8 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     savesInBank: true,
     investsInStocks: true,
     buildsCompany: null,
+    leverageToFound: false,
+    undercut: null,
   },
   // As três abaixo ainda se comportam como `investor`; ganham corpo nas fases
   // 3, 5 e 6.
@@ -82,6 +102,8 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     savesInBank: true,
     investsInStocks: false,
     buildsCompany: 'varejo',
+    leverageToFound: false,
+    undercut: null,
   },
   tycoon: {
     id: 'tycoon',
@@ -91,15 +113,28 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     savesInBank: true,
     investsInStocks: true,
     buildsCompany: 'tecnologia',
+    leverageToFound: false,
+    undercut: null,
   },
+  // Funda no mesmo setor do `entrepreneur` e vende 15% abaixo da média. Existe
+  // para que o checklist de fim de fase tenha uma corrida que **compete** — com
+  // `buildsCompany: null` ela era `passive` com a rotina embaralhada e as duas
+  // fechavam dez anos no mesmo centavo, medindo a mesma vida duas vezes.
   pricewar: {
     id: 'pricewar',
-    routine: ['trabalhar', 'trabalhar', 'lazer'],
+    // Rotina do `passive`, e por dois motivos medidos. Carisma no lugar de
+    // diploma porque atendente não levanta capital de fundação nem com crédito.
+    // E lazer no terceiro bloco porque trabalhar+socializar+estudar é o
+    // orçamento que a C3 diz não fechar: a medição deu saúde média 4,8 e humor
+    // 0,2 em dez anos, com o curso nunca terminando.
+    routine: ['trabalhar', 'socializar', 'lazer'],
     coursePlan: [],
     applyEveryDays: 30,
     savesInBank: true,
     investsInStocks: false,
-    buildsCompany: null,
+    buildsCompany: 'varejo',
+    leverageToFound: true,
+    undercut: 0.85,
   },
   raider: {
     id: 'raider',
@@ -109,6 +144,8 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     savesInBank: true,
     investsInStocks: true,
     buildsCompany: null,
+    leverageToFound: false,
+    undercut: null,
   },
 }
 
@@ -260,7 +297,43 @@ export function decideActions(state: GameState, strategy: Strategy): GameAction[
             (account.savingsLockedUntilDayIndex === null ||
               state.date.dayIndex >= account.savingsLockedUntilDayIndex),
         )
-        if (liquid) actions.push({ kind: 'resgatar', bankId: liquid.bankId, amount: gap })
+        if (liquid) {
+          actions.push({ kind: 'resgatar', bankId: liquid.bankId, amount: gap })
+        } else if (strategy.leverageToFound && state.banking.loans.every((loan) => loan.borrower !== 'player')) {
+          // Resgata tudo o que houver e completa com crédito. Prazo longo de
+          // propósito: a parcela precisa caber num salário de cargo de entrada,
+          // que é justamente quem depende do empréstimo para começar.
+          const savings = state.banking.accounts.reduce(
+            (total, account) =>
+              account.savingsLockedUntilDayIndex === null ||
+              state.date.dayIndex >= account.savingsLockedUntilDayIndex
+                ? total + account.savings
+                : total,
+            0,
+          )
+          const missing = gap - savings
+          const bank = [...BANKS]
+            .filter((item) => player.creditScore >= item.minScore)
+            .sort((a, b) => b.incomeMultiple - a.incomeMultiple)[0]
+          if (bank && missing > 0 && missing <= monthlyIncome(state) * bank.incomeMultiple) {
+            for (const account of state.banking.accounts) {
+              if (account.savings > 0) {
+                actions.push({
+                  kind: 'resgatar',
+                  bankId: account.bankId,
+                  amount: account.savings,
+                })
+              }
+            }
+            actions.push({
+              kind: 'tomarEmprestimo',
+              bankId: bank.id,
+              loanKind: 'pessoal',
+              amount: missing,
+              termDays: FOUNDING_LOAN_TERM_DAYS,
+            })
+          }
+        }
       }
     } else if (mine.status === 'ativa' && mine.cash > 0) {
       const industry = INDUSTRIES.find((item) => item.id === mine.industryId)
@@ -269,6 +342,19 @@ export function decideActions(state: GameState, strategy: Strategy): GameAction[
         if (investment > nominal(state.macro, 2000)) {
           actions.push({ kind: 'expandirCapacidade', companyId: mine.id, investment })
         }
+        // Guerra de preço: reprecifica contra a média do setor todo mês. Ler
+        // `averagePrice` é o mesmo que o jogador faz olhando a aba do setor —
+        // não é informação privilegiada.
+        if (strategy.undercut !== null) {
+          const sector = state.industries[mine.industryId]
+          if (sector) {
+            const target = sector.averagePrice * strategy.undercut
+            if (target > 0 && Math.abs(target - mine.price) / mine.price > 0.02) {
+              actions.push({ kind: 'ajustarPreco', companyId: mine.id, price: target })
+            }
+          }
+        }
+
         const supported = (mine.capitalStock * industry.capitalTurnover) / industry.outputPerEmployee
         const hires = Math.floor(supported - mine.workforce.headcount)
         if (hires > 0) {

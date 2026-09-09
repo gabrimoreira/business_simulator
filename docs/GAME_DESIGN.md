@@ -808,6 +808,91 @@ seis rodadas de oferta a 140% de prêmio com caixa de bilhões. O critério de
 aceite da Fase 6 continua verdadeiro, mas o preço subiu — é o antagonismo
 funcionando.
 
+### Ajustes da Fase 8
+
+**Decisão registrada — ordem de débito: conta corrente primeiro, caixa depois.**
+Era o inverso, e o inverso tem um efeito que só aparece em década simulada:
+no dia 10 as contas do mês esvaziavam o caixa, e no dia 11 o jogador não tinha
+com que comprar marmita **tendo saldo no banco**. O `pricewar` atravessou dez
+anos com saúde média 6,8 e humor 0,8 por causa disso — vivo, mas em coma
+permanente. Ninguém paga o aluguel com o dinheiro do almoço. Com a ordem
+trocada: saúde média 99,9, humor 96,8.
+
+**Decisão registrada — a manchete de fecho é escrita em `finishRun`, não no
+passo `news`.** O tick para de avançar assim que `meta.ending` é marcado, então
+uma manchete agendada para o passo seguinte nunca seria publicada. `finishRun`
+escolhe o veículo de maior alcance e publica ali mesmo, antes de congelar.
+
+**Decisão registrada — o que sobrevive ao `clearSave()`.** O ranking local e os
+arquétipos destravados vivem em um object store `meta` separado (DB_VERSION 2),
+fora do save. É isso que faz o New Game+ existir sem servidor: apagar a partida
+não apaga a carreira.
+
+| O que estava errado | Sintoma | Correção |
+|---|---|---|
+| `debit()` pagava do caixa antes da conta | dez anos de saúde 6,8 no `pricewar` | conta corrente primeiro, caixa depois |
+| `filhoDePolítico` só tinha vantagem | arquétipo dominante sem custo — teste de trade-off reprovou | ganha `notoriety: 35` inicial |
+| `advance()` devolvia estado congelado quando a partida acabava | cinco vezes em quatro fases eu persegui bug de simulação que era jogador morto | `advance()` **lança** se o `dayIndex` não avançou |
+
+**Sobre o `advance()` que lança.** Vale registrar porque foi o erro mais caro do
+projeto inteiro: um `worldTick` sobre partida encerrada devolve o estado intacto,
+sem erro, e o helper de teste devolvia isso como se fosse o dia 3.650. Testes que
+afirmavam medir 200 e 300 dias mediam 56 e 57. A correção é estrutural, não de
+balanceamento: o helper agora falha alto e manda financiar o jogador.
+
+### O que a Fase 8 mediu
+
+**Critério de aceite da fase — partida completa dos 18 aos 65.** Uma corrida de
+17.166 dias (`--strategy investor --seed 42`) chega aos 65 anos, dispara o
+desfecho `aposentadoria`, publica a manchete de fecho no veículo de maior
+alcance e congela o tick. Saúde média 100,0, humor 96,9, quatro diplomas, cargo
+`especialista`, patrimônio nominal R$ 42,5 mi.
+
+| Estratégia | 10 anos (real) | 47 anos (real) | Faixa do §2.1 |
+|---|---|---|---|
+| `passive` | R$ 183,6 k | — | R$ 1,1–1,8 M aos 65 |
+| `investor` | — | R$ 6,11 M | R$ 20–70 M — **ainda 3× abaixo** |
+| `pricewar` | R$ 75,2 k, empresa de R$ 358 k | — | — |
+
+O `investor` subiu de R$ 1,9–2,2 M (medição da Fase 3) para R$ 6,11 M, o que
+fecha dois terços da distância mas não a fecha. O que falta continua sendo o
+mesmo diagnóstico do §7 da Fase 5: o caminho de patrimônio grande é **empresa**,
+e o `investor` não funda nenhuma.
+
+**O `pricewar` era o `passive` disfarçado.** As duas fechavam dez anos no mesmo
+centavo — R$ 270.063,21 —, porque `pricewar` tinha `buildsCompany: null` e só
+diferia na ordem da rotina. Metade do checklist de fim de fase media a mesma vida
+duas vezes, em todas as fases desde a 5. Agora ela funda em varejo e pratica 85%
+do preço médio do setor.
+
+**Para fundar foi preciso crédito, e isso era o buraco documentado.** Nenhuma
+medição anterior exercitou a fundação alavancada, que é o único caminho de quem
+começa como atendente: R$ 50 mil reais de capital mínimo é mais do que um cargo
+de entrada acumula antes de a inflação comer a poupança. Com
+`leverageToFound`, a estratégia resgata a aplicação, completa com empréstimo de
+dez anos no banco de maior múltiplo de renda e funda no ano 4. A dívida amortiza
+de R$ 43,2 k para R$ 20,5 k até o ano 10, o score cai de 700 para 462 e a
+empresa vale R$ 358 k — é o trade-off funcionando.
+
+**A C3 continua verdadeira, e agora tem número.** Tentei dar à `pricewar` a
+rotina `trabalhar + socializar + estudar`, para ter carisma e diploma. Dez anos
+depois: saúde média **4,8**, humor **0,2**, e o curso nunca terminou. Três blocos
+pesados não cabem no orçamento diário — o descanso não é opcional, é o que paga
+os outros dois. Carisma **ou** diploma; não os dois.
+
+**Defeito aberto no harness, não no jogo: `npx vitest run` sai com código 1.**
+Os 241 testes passam (13/13 arquivos), mas o processo termina vermelho por
+`[vitest-worker]: Timeout calling "onTaskUpdate"`. A causa é o formato dos
+testes: quatro deles bloqueiam o worker por mais de dois minutos num laço de CPU
+puro (`macro percorre as quatro fases` 178s, `Selic dentro dos limites` 146s,
+`mundo listado continua vivo` 139s, `quem apura melhor publica rumor` 133s).
+Enquanto o laço roda, o worker não lê a resposta do reporter, e o timer de 5s do
+birpc dispara primeiro. Baixar `maxWorkers` para 4 levou de 6 erros para 3;
+não elimina, porque esse timeout não é configurável. A correção real é fatiar
+esses quatro testes em janelas menores — o que muda o que eles afirmam, então
+não fiz na véspera do commit. **Não use `dangerouslyIgnoreUnhandledErrors`
+aqui**: mascararia erro de verdade junto.
+
 ### O que a Fase 3 mediu, e o que ficou em aberto
 
 Aos 65 anos, em três seeds:
