@@ -58,6 +58,12 @@ const COLUMNS = [
   'index',
   'job',
   'salary',
+  // Carisma e inteligência estão aqui porque a carreira trava por skill, não
+  // por dinheiro: sem estas colunas, uma estratégia presa no cargo 6 parecia
+  // problema de rendimento da bolsa.
+  'charisma',
+  'intel',
+  'technical',
   'score',
   'debt',
   'health',
@@ -103,6 +109,9 @@ function row(state: GameState): string {
     macro.marketIndex.toFixed(1),
     job ? job.id : '-',
     player.career.salary.toFixed(2),
+    player.skills.charisma.toFixed(0),
+    player.skills.intelligence.toFixed(0),
+    player.skills.technical.toFixed(0),
     player.creditScore.toFixed(0),
     debt.toFixed(2),
     player.health.toFixed(1),

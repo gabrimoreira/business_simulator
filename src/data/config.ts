@@ -131,8 +131,27 @@ export const ACTION_COSTS = {
   estudar: { blocks: 1, energy: 20, intelligenceGain: 0.02 },
   academia: { blocks: 1, energy: 25, fitnessGain: 0.4, healthGain: 0.3 },
   lazer: { blocks: 1, energy: 10, moodGain: 8 },
+  // `charismaGain` é o ganho **na base zero**; o rendimento cai com o quadrado
+  // da folga que ainda resta (ver `SKILL_CURVE`). Linear, este 0,2 levava
+  // carisma de 10 a 100 em pouco mais de um ano de blocos — e carisma é o
+  // requisito de `encarregado`, `gerente`, `diretor` e `c-level`. Um bloco
+  // repetido comprava a diretoria inteira enquanto inteligência custava
+  // R$ 136 mil de mensalidade e 2.540 dias de estudo.
   socializar: { blocks: 1, energy: 15, charismaGain: 0.2, contacts: 1 },
 } as const
+
+/**
+ * Rendimento decrescente das skills treinadas por bloco repetido.
+ *
+ * `ganho = base × (1 − skill/100)^expoente`. Com expoente 2, sair de 10 e
+ * chegar a 30 leva ~5 meses (o portão de `encarregado` continua barato), a 60
+ * leva ~2 anos, a 85 leva ~7,6 anos e 100 é inalcançável na prática.
+ *
+ * É o formato certo para a coisa que modela: ficar sociável é fácil, ficar
+ * magnético é obra de uma vida. E impede que a escada executiva inteira seja
+ * comprada com um bloco repetido.
+ */
+export const SKILL_CURVE = { exponent: 2 } as const
 
 // --- Carreira (GAME_DESIGN §3.3) -------------------------------------------
 
@@ -166,6 +185,14 @@ export const AUTOPLAY_HUNGER_THRESHOLD = 50
 
 /** E escolhe a refeição mais barata que leve a fome até aqui. */
 export const AUTOPLAY_TARGET_HUNGER = 80
+
+/**
+ * Dias de comida que o saque automático cobre de uma vez.
+ *
+ * Sacar todo dia enche o log de trinta linhas por mês; sacar um mês de uma vez
+ * é o que uma pessoa faz. Ver `autoEat` em `engine/autoplay.ts`.
+ */
+export const AUTOPLAY_TOPUP_DAYS = 30
 
 /** Teto de refeições por dia. */
 export const MEALS_PER_DAY = 3

@@ -184,72 +184,109 @@ qualificação; aposentadoria aos 65 (47 anos de jogo = 17.155 dias).
 
 ### 2.1 Alvos
 
-| Estratégia | 1º milhão (real) | 1º milhão (nominal) | Patrimônio aos 65 (real) | Freio principal |
-|---|---|---|---|---|
-| `passive` — só trabalha | ano 36–42 | ~ano 24 | R$ 1,1–1,8 M | teto salarial sem diploma + eventos de vida |
-| `investor` — trabalha, estuda, investe | ano 15–19 | ~ano 11–13 | R$ 20–70 M | IR 15%, corretagem, drawdown de recessão |
-| `entrepreneur` — funda e opera | ano 8–11 | ~ano 6–8 | R$ 60–500 M | capital de expansão, moral, guerra de preços da IA |
-| `tycoon` — alavanca, adquire, manipula | ano 6–9 | ~ano 5–6 | R$ 1–15 B | antitruste, `notoriety`, tycoons rivais |
+**Estes números foram rebaselinados a partir do medido, não derivados no papel.**
+A versão anterior desta tabela foi escrita antes de existir motor, e o §7
+registra a cadeia de defeitos que fez as medições contradizerem-na por oito
+fases. Onde a aritmética de projeto e o runner discordam, quem manda é o runner.
+
+| Estratégia | Patrimônio aos 65 (real) | Freio principal |
+|---|---|---|
+| `passive` — só trabalha | R$ 1–2 M | teto salarial sem diploma + eventos de vida |
+| `investor` — trabalha, estuda, investe | R$ 50–150 M | IR 15%, corretagem, drawdown de recessão |
+| `entrepreneur` — funda e opera | R$ 1–5 B | capital de expansão, moral, guerra de preços da IA |
+| `tycoon` — alavanca, adquire, manipula | R$ 1,5–5 B † | antitruste, `notoriety`, tycoons rivais |
+
+† **A faixa da `tycoon` é provisória e não deve ser levada a sério ainda.** A
+estratégia do runner com esse nome não adquire, não compra jornal e não financia
+político: ela é o `entrepreneur` com uma carteira de ações e um diploma a mais.
+Medida em três seeds, alterna com ele — R$ 1,48/1,57/5,02 bi contra
+R$ 1,19/3,06/4,78 bi — o que é o esperado de duas estratégias que fazem a mesma
+coisa. Enquanto ela não exercitar aquisição, mídia e política, essa linha mede
+ruído, não desenho.
+
+A coluna "1º milhão" saiu da tabela. Ela media a travessia de um limiar fixo em
+um jogo cuja inflação corre por 47 anos, então dizia coisas diferentes conforme o
+ano em que a travessia acontecia — e a diferença entre o marco nominal e o real
+chegava a catorze anos. O patrimônio real aos 65 é o único número que compara
+duas estratégias sem essa ambiguidade.
 
 ### 2.2 De onde vêm esses números
 
-**`passive`.** Sem cursos, a carreira para em *Encarregado de loja*,
-R$ 3.400/mês. Excedente real médio de R$ 1.300/mês (R$ 700 no início,
-R$ 2.100 no fim), depositado em poupança a ~3,4% real. Somando os três
-patamares de renda com juros compostos: **R$ 1,4 M real** aos 65. Cruza
-R$ 1 M real por volta do ano 38. Em nominal cruza no ano ~24 — é por isso que o
-runner reporta as duas colunas: uma meta nominal mentiria por 14 anos.
+**`passive`.** Sem cursos, a carreira para em *Encarregado de loja*. Todo o
+excedente vai para poupança, e 47 anos de aporte de assalariado compõem para
+**R$ 1,09 M real** — no piso da faixa. É a curva que dá escala às outras três: o
+que ela mede é quanto vale uma vida inteira de trabalho sem nenhuma alavanca.
 
-**`investor`.** Estuda e chega a Gerente (R$ 26.000/mês). Excedente real médio
-de R$ 6.500/mês, aplicado a 7% real (índice) + até 4% de alfa real para quem
-opera notícia e rumor bem. Três patamares de aporte compostos a 11% real dão
-**R$ 18–25 M real**, cruzando R$ 1 M real no ano ~17.
+**`investor`.** O texto anterior supunha que ela parava em *Gerente*
+(R$ 26.000/mês). Não para: com carisma e os quatro diplomas ela chega a
+**`c-level`**, e o salário nominal termina em R$ 665 mil/mês. Medido: **R$ 81 M
+real**. A conclusão de design do texto antigo — "investir sozinho é lento,
+nenhum aporte de assalariado vira império" — **continua valendo, e por uma margem
+maior do que se supunha**: o `entrepreneur` termina 32× acima dela.
 
-> **Conclusão de design que sai daí:** investir sozinho é *lento*. Nenhum aporte
-> de assalariado vira império. O acelerador é fundar empresa, e é isso que faz o
-> jogo do spec ser sobre empreender e não sobre day trade. Se o runner mostrar
-> `investor` chegando perto de `entrepreneur`, o alfa está generoso demais.
+**`entrepreneur`.** O texto anterior dizia que "reinvestindo lucro em capacidade,
+a receita compõe 40–70% ao ano". Isso é aritmeticamente impossível com as
+constantes do §3, e a medição mostrou por quê:
 
-**`entrepreneur`.** Capital de fundação de R$ 50.000 sai por poupança no ano
-4–6, ou por empréstimo no ano 3 (com juros punitivos e score baixo). O freio
-real do early game é **capacidade produtiva**, não demanda: o setor tem mercado
-de bilhões, mas `receita = min(demanda, capacidade)` e a capacidade inicial é de
-um funcionário — teto de ~R$ 25.000/mês de receita. Reinvestindo lucro em
-capacidade, a receita compõe 40–70% ao ano até a participação de mercado passar
-a morder. Empresa com R$ 1,2 M de receita anual e margem de 11% dá R$ 130 mil de
-lucro, que a 8× de múltiplo setorial vale R$ 1,04 M — daí o 1º milhão no ano
-8–11. O topo (R$ 60–500 M) depende de IPO e de aquisições.
+- `capacidade = min(mão de obra, capital × giro)`, e no varejo cada funcionário
+  produz R$ 350 mil a um giro de 3,0 — então **crescer uma cabeça custa
+  ~R$ 100 mil**: R$ 117 mil de capital mais um mês de salário adiantado
+- uma empresa de uma pessoa gera **~R$ 7 mil de caixa livre por ano**
 
-**`tycoon`.** Mesmo início do `entrepreneur`, mais alavancagem, compra de jornal
-e financiamento de político. Chega antes e vai muito mais longe, mas é a única
-estratégia com risco de **perda catastrófica**: investigação com condenação
-bloqueia bens e custa meses de ações. O topo é limitado por antitruste e por
-2–3 tycoons rivais competindo pelos mesmos alvos.
+São catorze anos por funcionário com lucro retido. Não existe composição de 40%
+ao ano por esse caminho, e é isso que faz o **crédito empresarial** ser a alavanca
+central desta estratégia, não um recurso de emergência: o limite é metade da
+receita, e a receita é justamente o que cresce junto com a capacidade. Financiado
+em vez de poupado, o mesmo motor leva a empresa de 1 para 392 funcionários e
+R$ 312 M de receita em trinta anos. Medido: **R$ 2,61 B real** aos 65.
 
-> **Medido na Fase 1** (nominal, sem bolsa nem juros, que só chegam nas Fases 2
-> e 3): `passive` termina 10 anos com R$ 229 mil e 30 anos com R$ 1,57 M, preso
-> em Encarregado de loja — exatamente o teto sem diploma previsto aqui.
-> `investor` fica **atrás** aos 10 anos (R$ 43 mil, porque pagou R$ 30 mil de
-> matrícula e só então chegou a Analista júnior) e passa à frente por volta do
-> **ano 14**: R$ 1,84 M aos 20 anos e R$ 5,0 M aos 30. A inversão nos primeiros
-> 10 anos é esperada enquanto não existe onde compor capital; se persistir
-> depois da Fase 3, o critério de reprovação abaixo vale.
+> **A conclusão de design que sai daí, e que substitui a anterior:** o acelerador
+> não é "fundar empresa", é **financiar a empresa fundada**. Quem funda e espera
+> o lucro pagar a expansão joga a mesma curva do `passive` com passos extras. O
+> jogo é sobre capital — inclusive o de terceiros.
+
+**`tycoon`.** Mesmo motor do `entrepreneur`, mais bolsa e mais alavancagem, e a
+única estratégia com risco de **perda catastrófica**: investigação com condenação
+bloqueia bens e custa meses de ações. O topo é limitado por antitruste e por 2–3
+tycoons rivais competindo pelos mesmos alvos.
+
+**Intensidade de capital, o eixo que faltava no §3.7.** O que decide onde vale a
+pena fundar não é o múltiplo do setor, é quanto capital cada funcionário exige —
+`outputPerEmployee / capitalTurnover`:
+
+| Setor | Capital por cabeça | Múltiplo |
+|---|---|---|
+| varejo | R$ 117 mil | 12 |
+| saúde, mídia | R$ 333 mil | 18, 11 |
+| bancos | R$ 450 mil | 8 |
+| tecnologia | R$ 800 mil | 22 |
+| energia, mineração | R$ 3,0 mi | 9, 7 |
+
+O múltiplo de 22 da tecnologia não compensa exigir **sete vezes** o capital do
+varejo por funcionário: medida nos dois setores, a mesma estratégia terminou com
+empresa de R$ 219 M em tecnologia contra R$ 6,06 bi em varejo. Quem começa do
+zero funda onde o capital compõe; energia e mineração são setores para quem
+**compra**, não para quem funda — e é isso que dá sentido à aquisição existir.
 
 ### 2.3 Critérios de reprovação do balanceamento
 
 O runner headless reprova a build se qualquer um ocorrer:
 
-- **Patrimônio explosivo:** patrimônio real acima de 20% do valor de mercado
-  agregado do jogo. Pelas tabelas do §3.7 o mercado nasce com R$ 186 B de
-  receita setorial somada, ~R$ 21 B de lucro líquido agregado e múltiplo médio de
-  ~10× — ou seja **~R$ 210 B de valor de mercado**, e teto de patrimônio real em
-  R$ 42 B. Reprova também CAGR real acima de 60% sustentado por 5 anos.
+- **Patrimônio explosivo:** patrimônio acima de 20% do valor de mercado agregado
+  **do ano corrente**, medido no mesmo tick. O critério é relativo de propósito:
+  a versão anterior fixava o teto em R$ 42 B, derivado do mercado de R$ 210 B do
+  **ano 0**, e num jogo em que o índice multiplica por 143 em 47 anos um número
+  absoluto reprova crescimento saudável no fim da partida e não reprova nada no
+  começo. Reprova também CAGR real acima de 60% sustentado por 5 anos.
 - **Jogador travado:** qualquer estratégia terminando com saúde < 20 de forma
   recorrente, fome zerada mais de 30 dias no total, ou patrimônio real negativo
   por mais de 2 anos sem caminho de saída.
-- **Estratégia dominada:** `passive` superando `investor`, ou `investor`
-  superando `entrepreneur`, ao final de 10 anos. A ordem das quatro curvas é o
-  invariante de balanceamento mais importante do jogo.
+- **Estratégia dominada:** qualquer inversão em
+  `passive < investor < entrepreneur < tycoon`, aos 10 anos ou aos 65. A ordem
+  das quatro curvas é o invariante de balanceamento mais importante do jogo — e
+  foi o **único** critério deste bloco que reprovou de verdade, da Fase 5 à 8,
+  sem que eu percebesse, porque as estratégias do runner jogavam mal demais para
+  a medição significar alguma coisa (§7).
 - **Convergência de setor:** qualquer setor terminando com um único preço
   praticado (desvio-padrão de preço < 3% da média) ou com monopólio permanente
   (share > 70% por mais de 8 trimestres).
@@ -994,6 +1031,74 @@ ruído de fundo.
 Como no som, a **decisão** é dado puro (`src/ui/motion.ts`, testado em Node) e o
 que toca o DOM fica à parte (`src/ui/useFlash.ts`). Teste de arquitetura guarda
 a separação.
+
+### O rebaseline: por que o §2.1 mudou
+
+O `investor` fechava 47 anos com R$ 6,11 M reais contra uma faixa de R$ 20–70 M,
+e o diagnóstico registrado aqui — "patrimônio grande vem de empresa, e o
+`investor` não funda nenhuma" — **estava errado**. Bastou acrescentar colunas de
+`charisma`, `intelligence` e `technical` ao CSV do runner para o quadro real
+aparecer: o jogador ficava **atendente até o ano 37**, com inteligência 15 no ano
+27. Sem essas colunas, uma carreira travada por falta de skill parecia problema
+de rendimento da bolsa.
+
+O que veio depois foi uma cadeia de seis defeitos, cinco no instrumento de
+medição e **um no motor**:
+
+| Onde | O que estava errado | Sintoma medido |
+|---|---|---|
+| runner | matrícula só era paga resgatando de **uma** conta; nunca vendia ação | 25 anos de atendente com R$ 45 mil entre banco e carteira |
+| runner | bloco `estudar` sem curso ativo é recusado e não gasta bloco | um terço de cada dia queimado a seco por quarenta anos |
+| runner | gastava 70% do caixa da empresa em capital **antes** de tentar contratar | 102 expansões aceitas contra 97 contratações recusadas |
+| runner | expandia "com o que sobra" todo mês | a empresa nunca acumulava o mês de salário adiantado que a contratação cobra: **um funcionário por quarenta anos** |
+| runner | capital de fundação fixo em R$ 60 mil | em tecnologia, um funcionário custa R$ 280 mil/ano e produzir isso exige R$ 800 mil de capital: a `tycoon` nasceu insolvente e quebrou em dez meses |
+| **motor** | `privateHoldingsValue` avaliava empresa privada por `caixa − dívida` | empresa com R$ 312 M de receita entrava no patrimônio pelo saldo da conta corrente |
+
+**O defeito do motor merece registro separado, porque não era um número baixo —
+era uma arbitragem.** `venderEmpresa` avalia por `valuationOf` (lucro × múltiplo
+do setor); possuir avaliava pelo caixa. Vender rendia bilhões, possuir rendia
+dezenas de milhões, e a jogada ótima passava a ser vender a empresa e recomprá-la.
+Agora os dois lados usam a mesma conta: **patrimônio é o que você consegue por
+aquilo**.
+
+**A lição de método, que é a mais cara desta sessão.** Durante quatro fases eu
+li os números do runner como se medissem o jogo. Eles mediam o jogo *jogado
+mal* — e um instrumento que joga mal não reprova o motor, reprova a si mesmo. O
+critério de "estratégia dominada" do §2.3 estava violado desde a Fase 5 e eu não
+vi, porque `pricewar` era `passive` com a rotina embaralhada e `raider` ainda é
+`investor` com outro nome. **Antes de concluir que uma faixa está errada, é
+preciso provar que a estratégia que a mediu sabe jogar.**
+
+Duas correções que não moveram número e ficam registradas como tal: o rendimento
+decrescente do carisma (`SKILL_CURVE`) fecha um exploit real — 0,2/dia linear
+levava carisma de 10 a 100 em pouco mais de um ano, comprando a escada executiva
+inteira com um bloco repetido — mas o patrimônio final ficou **idêntico ao
+centavo**, porque o gargalo de `c-level` era inteligência e MBA. E o teto de
+alavancagem da empresa em 25% da receita, contra os 50% que o motor permite,
+mudou o resultado em 2%.
+
+**O que veio depois, seguindo a mesma linha.** Corrigido o `netWorth`, as três
+estratégias que fundam empresa passaram a expor defeitos que estavam escondidos
+atrás de uma empresa que não valia nada:
+
+| O que estava errado | Sintoma medido | Correção |
+|---|---|---|
+| capital de fundação fixo em R$ 60 mil | em tecnologia, um funcionário custa R$ 280 mil/ano e produzir isso exige R$ 800 mil: a `tycoon` foi a −R$ 191 mil de caixa em dez meses | capital dimensionado pelo setor, cobrindo o dobro da folha inicial |
+| **jogador morria de fome com dinheiro no banco** | a `tycoon` morreu aos 34 anos com R$ 6,66 milhões aplicados, caixa drenando R$ 341/dia e fome parada em 30 | `autoEat` saca da conta e resgata a aplicação livre antes de deixar o jogador passar fome |
+| crescimento sem freio | a empresa cresceu 26 anos até R$ 2,3 bi de receita e 1.928 funcionários, e quebrou com −R$ 570 M | reserva de um mês de folha e **nenhum crédito para empresa que dá prejuízo** |
+| esperar o plano de cursos inteiro para fundar | a `tycoon` esperava um MBA de R$ 90 mil — mais caro que a empresa — e fundava anos depois | funda quando o próximo curso custa mais que o capital de fundação |
+
+**O bug da fome merece destaque porque não é do runner: é do jogo.** `autoEat`
+filtrava as refeições por `player.money` e nunca ia ao banco, então qualquer
+jogador que avançasse o tempo com o dinheiro aplicado morria de fome ao lado da
+própria conta bancária. Vale para o botão de avançar semana e para o catch-up
+offline, não só para a simulação. É a terceira vez que este projeto encontra a
+mesma família de erro — a primeira foi a ordem de débito das contas na Fase 8 —
+e o padrão é sempre o mesmo: **um caminho de dinheiro que enxerga só um bolso.**
+
+**Pendência conhecida:** a `raider` continua sendo um `investor` com outro nome,
+e a `tycoon` é um `entrepreneur` com carteira. Enquanto forem, o checklist que as
+inclui mede a mesma vida duas vezes, e a faixa da `tycoon` no §2.1 é ruído.
 
 ### O que a Fase 3 mediu, e o que ficou em aberto
 

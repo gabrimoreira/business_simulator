@@ -17,6 +17,7 @@ import {
   ACTION_BLOCKS_PER_DAY,
   AUTOPLAY_HUNGER_THRESHOLD,
   AUTOPLAY_TARGET_HUNGER,
+  AUTOPLAY_TOPUP_DAYS,
   MEALS_PER_DAY,
 } from '../data/config'
 import { MEALS } from '../data/living'
@@ -43,6 +44,57 @@ function actionFor(kind: ActionBlockKind): GameAction | null {
 }
 
 /**
+ * Traz dinheiro para o bolso quando o caixa não paga nem uma refeição: saca da
+ * conta corrente e, se ainda faltar, resgata a aplicação que estiver livre.
+ *
+ * Existe porque a alternativa é o jogador **morrer de fome com dinheiro no
+ * banco** — medido: a `tycoon` morreu aos 34 anos com R$ 6,66 milhões
+ * aplicados, o caixa drenando R$ 341 por dia e a fome parada em 30. É o mesmo
+ * princípio da ordem de débito: ninguém morre de fome ao lado da própria conta
+ * bancária, e o avanço de tempo da UI cai neste mesmo caminho.
+ *
+ * Usa `sacar` e `resgatar`, as mesmas ações do jogador — nenhum poder
+ * exclusivo do piloto automático (CLAUDE.md §4).
+ */
+function topUpCash(state: GameState): { state: GameState; log: LogEntry[] } {
+  const log: LogEntry[] = []
+  let current = state
+
+  // Um mês de comida na refeição que o piloto automático escolheria.
+  const ration =
+    MEALS.find((meal) => meal.hunger >= AUTOPLAY_TARGET_HUNGER - AUTOPLAY_HUNGER_THRESHOLD) ??
+    MEALS[MEALS.length - 1]
+  if (!ration) return { state: current, log }
+  const target =
+    nominal(current.macro, ration.cost) * MEALS_PER_DAY * AUTOPLAY_TOPUP_DAYS
+
+  for (const account of current.banking.accounts) {
+    if (current.player.money >= target) break
+    if (account.checking <= 0) continue
+    const amount = Math.min(account.checking, target - current.player.money)
+    const result = applyAction(current, { kind: 'sacar', bankId: account.bankId, amount })
+    if (result.state === current) continue
+    current = result.state
+    log.push(...result.log)
+  }
+
+  for (const account of current.banking.accounts) {
+    if (current.player.money >= target) break
+    const locked =
+      account.savingsLockedUntilDayIndex !== null &&
+      current.date.dayIndex < account.savingsLockedUntilDayIndex
+    if (locked || account.savings <= 0) continue
+    const amount = Math.min(account.savings, target - current.player.money)
+    const result = applyAction(current, { kind: 'resgatar', bankId: account.bankId, amount })
+    if (result.state === current) continue
+    current = result.state
+    log.push(...result.log)
+  }
+
+  return { state: current, log }
+}
+
+/**
  * Come sozinho quando a fome cai abaixo do limiar, escolhendo a refeição mais
  * barata que couber no bolso. Sem isso, qualquer rotina automática mata o
  * jogador de fome em duas semanas — e o runner mediria a inanição, não a
@@ -51,6 +103,7 @@ function actionFor(kind: ActionBlockKind): GameAction | null {
 function autoEat(state: GameState): { state: GameState; log: LogEntry[] } {
   let current = state
   const log: LogEntry[] = []
+  let toppedUp = false
 
   while (
     current.player.hunger < AUTOPLAY_HUNGER_THRESHOLD &&
@@ -73,7 +126,17 @@ function autoEat(state: GameState): { state: GameState; log: LogEntry[] } {
           best === null || item.cost / item.hunger < best.cost / best.hunger ? item : best,
         null,
       )
-    if (!meal) break
+    if (!meal) {
+      // Nada cabe no bolso: tenta o banco uma vez e reavalia. Uma vez só, para
+      // um jogador genuinamente quebrado não repetir saque recusado a cada volta.
+      if (toppedUp) break
+      toppedUp = true
+      const top = topUpCash(current)
+      if (top.state === current) break
+      current = top.state
+      log.push(...top.log)
+      continue
+    }
     const result = applyAction(current, { kind: 'comer', mealId: meal.id })
     if (result.state === current) break
     current = result.state

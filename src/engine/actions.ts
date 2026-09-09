@@ -7,7 +7,7 @@
  */
 import { produce } from 'immer'
 import type { ActionResult, GameAction, GameState, LogEntry, Skills } from './types'
-import { ACTION_BLOCKS_PER_DAY, ACTION_COSTS, MEALS_PER_DAY, VITALS } from '../data/config'
+import { ACTION_BLOCKS_PER_DAY, ACTION_COSTS, MEALS_PER_DAY, SKILL_CURVE, VITALS } from '../data/config'
 import { findMeal } from '../data/living'
 import { findJob } from '../data/jobs'
 import { findCourse } from '../data/courses'
@@ -46,6 +46,18 @@ import { BANKING } from '../data/config'
 import { fillBuy, fillSell } from './market'
 
 const clampVital = (value: number): number => clamp(value, 0, VITALS.max)
+
+/**
+ * Ganho de skill treinada por bloco, com rendimento decrescente.
+ *
+ * `base × (1 − skill/100)^expoente`: quem está em 10 avança quase o ganho
+ * cheio, quem está em 85 avança 2% dele. Ver `SKILL_CURVE` em `data/config`
+ * para o porquê do formato.
+ */
+function trainedGain(base: number, current: number): number {
+  const headroom = Math.max(0, 1 - current / 100)
+  return base * headroom ** SKILL_CURVE.exponent
+}
 
 /** Validade padrão de uma ordem limite em livro, em dias. */
 const MARKET_ORDER_VALIDITY_DAYS = 30
@@ -190,7 +202,11 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
           log.push(entry('info', 'Descanso.'))
         } else {
           const social = ACTION_COSTS.socializar
-          player.skills.charisma = clamp(player.skills.charisma + social.charismaGain, 0, 100)
+          player.skills.charisma = clamp(
+            player.skills.charisma + trainedGain(social.charismaGain, player.skills.charisma),
+            0,
+            100,
+          )
           player.contacts += social.contacts
           log.push(entry('info', 'Você fez contatos.'))
         }

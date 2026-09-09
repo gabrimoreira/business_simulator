@@ -5,6 +5,9 @@
  */
 import type { GameState } from './types'
 import { real } from './macro'
+import { valuationOf } from './companies'
+import { sectorMultiple } from './market'
+import { findIndustry } from '../data/industries'
 
 /** Caixa em conta corrente + aplicações, somando todos os bancos. */
 export function bankBalance(state: GameState): number {
@@ -27,20 +30,35 @@ export function portfolioValue(state: GameState): number {
   return total
 }
 
-/** Valor das empresas controladas pelo jogador, pela participação que ele detém. */
+/**
+ * Valor das empresas privadas do jogador, pela participação que ele detém.
+ *
+ * Avalia pelo **mesmo `valuationOf` que `venderEmpresa` usa** — lucro anualizado
+ * vezes o múltiplo do setor, com piso na receita. Antes valia `caixa − dívida`,
+ * o saldo da conta corrente da empresa: uma companhia com R$ 312 milhões de
+ * receita e R$ 37 milhões de capital entrava no patrimônio do dono pelo que
+ * tivesse no banco naquele dia.
+ *
+ * Isso não era só um número baixo, era uma arbitragem: vender rendia bilhões e
+ * possuir rendia dezenas de milhões, então a jogada ótima era vender a empresa
+ * todo dia e recomprá-la. Patrimônio é o que você consegue por aquilo — a mesma
+ * conta dos dois lados.
+ */
 export function privateHoldingsValue(state: GameState): number {
   let total = 0
   for (const companyId of state.companyOrder) {
     const company = state.companies[companyId]
     if (!company || company.isPublic) continue
+    const industry = findIndustry(company.industryId)
+    if (!industry) continue
     const shares = company.ownership.reduce(
       (sum, entry) => (entry.holderId === 'player' ? sum + entry.shares : sum),
       0,
     )
     const totalShares = company.ownership.reduce((sum, entry) => sum + entry.shares, 0)
     if (totalShares <= 0) continue
-    const equity = Math.max(0, company.cash - company.debt)
-    total += (shares / totalShares) * equity
+    const value = valuationOf(company, sectorMultiple(industry.multipleBase, state.macro.selic))
+    total += (shares / totalShares) * value
   }
   return total
 }
