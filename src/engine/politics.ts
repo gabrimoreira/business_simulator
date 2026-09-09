@@ -218,6 +218,7 @@ function proposeFromLoyalty(draft: GameState, log: LogEntry[]): void {
       proposedDayIndex: draft.date.dayIndex,
       voteDayIndex: draft.date.dayIndex + definition.debateDays,
       beneficiaryIndustryIds: definition.beneficiaryIndustryIds,
+      playerVote: null,
     }
     draft.politics.policyOrder.push(definition.id)
 
@@ -271,6 +272,7 @@ function spontaneousProposal(draft: GameState, log: LogEntry[]): void {
     proposedDayIndex: draft.date.dayIndex,
     voteDayIndex: draft.date.dayIndex + definition.debateDays,
     beneficiaryIndustryIds: definition.beneficiaryIndustryIds,
+    playerVote: null,
   }
   if (!reproposal) draft.politics.policyOrder.push(definition.id)
 

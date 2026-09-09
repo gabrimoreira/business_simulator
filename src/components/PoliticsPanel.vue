@@ -4,9 +4,55 @@ import { useGameStore } from '@/stores/game'
 import { formatPercent } from '@/lib/format'
 import { netLobby } from '@/engine/politics'
 import { POLITICS } from '@/data/config'
+import { POLICY_DEFS } from '@/data/policies'
+import { nominal } from '@/engine/macro'
+import { availableCash } from '@/engine/banking'
+import { formatMoneyCompact } from '@/lib/format'
+import type { PublicOffice } from '@/engine/types'
 
 const game = useGameStore()
 const amount = ref<number | null>(null)
+
+// --- carreira política ---------------------------------------------------
+// Financiar quem escreve as regras já existia; **ser** quem escreve, não. É a
+// outra metade da premissa do jogo, e sem ela `proporPolitica` era inalcançável:
+// o motor exige `player.office` para aceitar uma proposta.
+const office = computed(() => game.state?.player.office ?? null)
+
+const candidacies = computed(() => {
+  const state = game.state
+  if (!state) return []
+  return Object.entries(POLITICS.officeRequirements).map(([id, req]) => {
+    const cost = nominal(state.macro, req.campaign)
+    return {
+      office: id as PublicOffice,
+      cost,
+      // As três razões pelas quais o motor recusa, ditas antes do clique.
+      missingCharisma: Math.max(0, req.charisma - state.player.skills.charisma),
+      missingReputation: Math.max(0, req.reputation - state.player.publicReputation),
+      affordable: availableCash(state) >= cost,
+    }
+  })
+})
+
+function runFor(office: PublicOffice, campaignSpend: number): void {
+  game.dispatch({ kind: 'candidatarCargo', office, campaignSpend })
+}
+
+/** Projetos do catálogo que ainda não estão em tramitação nem aprovados. */
+const proposable = computed(() => {
+  const state = game.state
+  if (!state || !state.player.office) return []
+  return POLICY_DEFS.filter((def) => !state.politics.policies[def.id])
+})
+
+function propose(policyId: string): void {
+  game.dispatch({ kind: 'proporPolitica', policyId })
+}
+
+function vote(policyId: string, inFavor: boolean): void {
+  game.dispatch({ kind: 'votarPolitica', policyId, inFavor })
+}
 
 const debating = computed(() => {
   const state = game.state
@@ -168,6 +214,76 @@ function defend(): void {
         >
           Doar
         </button>
+      </div>
+    </div>
+
+    <!-- Carreira política: concorrer, propor e votar. -->
+    <div class="rounded-2xl border border-line bg-surface p-4">
+      <p class="pb-1 text-sm font-medium">
+        {{ office ? `Você é ${office}` : 'Concorrer a cargo' }}
+      </p>
+
+      <div v-if="!office" class="flex flex-col gap-2 pt-1">
+        <button
+          v-for="run in candidacies"
+          :key="run.office"
+          class="flex min-h-[48px] items-center justify-between gap-2 rounded-xl border border-line px-3 text-left disabled:opacity-40"
+          :disabled="run.missingCharisma > 0 || run.missingReputation > 0 || !run.affordable"
+          @click="runFor(run.office, run.cost)"
+        >
+          <span class="text-sm font-medium capitalize">{{ run.office }}</span>
+          <span class="text-right">
+            <span class="tnum block text-xs">{{ formatMoneyCompact(run.cost) }}</span>
+            <span class="block text-[11px] text-muted">
+              <template v-if="run.missingCharisma > 0">
+                faltam {{ Math.ceil(run.missingCharisma) }} de carisma
+              </template>
+              <template v-else-if="run.missingReputation > 0">
+                faltam {{ Math.ceil(run.missingReputation) }} de reputação
+              </template>
+              <template v-else-if="!run.affordable">caixa insuficiente</template>
+              <template v-else>campanha</template>
+            </span>
+          </span>
+        </button>
+      </div>
+
+      <div v-else class="pt-1">
+        <p class="pb-2 text-[11px] text-muted">
+          Quem ocupa cargo eletivo propõe projeto e vota nos que estão em pauta.
+        </p>
+        <div v-if="proposable.length" class="flex flex-col gap-1">
+          <button
+            v-for="def in proposable"
+            :key="def.id"
+            class="min-h-[44px] rounded-lg border border-line px-3 text-left text-xs"
+            @click="propose(def.id)"
+          >
+            Propor · {{ def.name }}
+          </button>
+        </div>
+        <p v-else class="text-[11px] text-muted">Nenhum projeto novo no catálogo.</p>
+      </div>
+    </div>
+
+    <div v-if="office && debating.length" class="rounded-2xl border border-line bg-surface p-4">
+      <p class="pb-2 text-sm font-medium">Seu voto</p>
+      <div v-for="item in debating" :key="item.policy.id" class="pb-2 last:pb-0">
+        <p class="text-xs">{{ item.policy.name }}</p>
+        <div class="flex gap-2 pt-1">
+          <button
+            class="min-h-[40px] flex-1 rounded-lg border border-up/40 text-xs font-medium text-up"
+            @click="vote(item.policy.id, true)"
+          >
+            A favor
+          </button>
+          <button
+            class="min-h-[40px] flex-1 rounded-lg border border-down/40 text-xs font-medium text-down"
+            @click="vote(item.policy.id, false)"
+          >
+            Contra
+          </button>
+        </div>
       </div>
     </div>
 

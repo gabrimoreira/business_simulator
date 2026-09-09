@@ -36,12 +36,21 @@ import { findOutlet } from '../data/newsOutlets'
 import { findAsset } from '../data/assets'
 import { ASSETS_CONFIG } from '../data/config'
 import { findIndustry } from '../data/industries'
-import { CONTROL, OPERATIONS, POLITICS } from '../data/config'
+import { CONTROL, DEFENSE, OPERATIONS, POLITICS } from '../data/config'
 import { findPolicyDef } from '../data/policies'
 import { netLobby } from './politics'
 import { annualizedProfit, valuationOf } from './companies'
 import { sectorMultiple } from './market'
-import { referencePrice, stakeOf, totalShares } from './ownership'
+import {
+  applyControl,
+  buyFromFloat,
+  poisonPill,
+  referencePrice,
+  sellToFloat,
+  stakeOf,
+  totalShares,
+  whiteKnight,
+} from './ownership'
 import { BANKING } from '../data/config'
 import { fillBuy, fillSell } from './market'
 
@@ -700,6 +709,7 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
           expiresDayIndex: draft.date.dayIndex + CONTROL.tenderDays,
           status: 'aberta',
           acceptedShares: 0,
+          playerAnswered: false,
         })
 
         draft.news.headlines.push({
@@ -1066,6 +1076,7 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
           proposedDayIndex: draft.date.dayIndex,
           voteDayIndex: draft.date.dayIndex + definition.debateDays,
           beneficiaryIndustryIds: definition.beneficiaryIndustryIds,
+          playerVote: null,
         }
         draft.politics.policyOrder.push(definition.id)
         log.push(entry('info', `Você apresentou ${definition.name}.`))
@@ -1472,6 +1483,134 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
           statementDay: BANKING.cardStatementDay,
         })
         log.push(entry('info', `Cartão ${bank.name} aprovado.`))
+        return
+      }
+
+      /**
+       * Defesa do controle — as três que a IA já usava contra o jogador.
+       *
+       * `agents.ts` chama `buyback`, `poisonPill` e `whiteKnight` desde a Fase
+       * 6b para defender empresas de NPC. O jogador não tinha como reagir, o
+       * que quebrava a paridade de ações do §4 a favor da IA. Os `case` abaixo
+       * chamam **as mesmas funções, com as mesmas constantes** — nenhum poder
+       * novo, só o vocabulário completo dos dois lados.
+       */
+      case 'responderOpa': {
+        const tender = draft.tenders.find((item) => item.id === action.tenderId)
+        if (!tender || tender.status !== 'aberta') {
+          log.push(entry('ruim', 'Oferta indisponível.'))
+          return
+        }
+        const company = draft.companies[tender.companyId]
+        if (!company) {
+          log.push(entry('ruim', 'Empresa desconhecida.'))
+          return
+        }
+        const held = stakeOf(company, 'player') * totalShares(company)
+        if (held <= 0) {
+          log.push(entry('ruim', 'Você não tem ações nessa empresa.'))
+          return
+        }
+        if (!action.accept) {
+          // Recusar é decisão, não inação: marca para o atacante não contar
+          // com essas ações e some da lista de pendências do jogador.
+          tender.playerAnswered = true
+          log.push(entry('info', `Você recusou a oferta por ${company.name}.`))
+          return
+        }
+
+        // Vende ao preço da oferta, limitado ao que ela ainda busca.
+        const sold = Math.min(held, Math.max(0, tender.sharesSought - tender.acceptedShares))
+        if (sold <= 0) {
+          log.push(entry('ruim', 'A oferta já está totalmente preenchida.'))
+          return
+        }
+        // Sai do jogador para o float e do float para o comprador: são as duas
+        // funções exportadas de `ownership`, sem tocar no `transfer` privado.
+        sellToFloat(company, 'player', sold, tender.pricePerShare)
+        buyFromFloat(company, tender.bidderId, sold, tender.pricePerShare)
+        tender.acceptedShares += sold
+        tender.playerAnswered = true
+        player.money += sold * tender.pricePerShare
+        applyControl(draft, company, log)
+        log.push(
+          entry('bom', `Você aceitou a oferta por ${company.name}.`, sold * tender.pricePerShare),
+        )
+        return
+      }
+
+      case 'pilulaDeVeneno': {
+        const company = draft.companies[action.companyId]
+        if (!company || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        // Dilui quem está comprando. Sem atacante identificado não há pílula:
+        // emitir ação contra ninguém é só diluir a si mesmo.
+        const raider = draft.tenders.find(
+          (item) => item.companyId === company.id && item.status === 'aberta',
+        )?.bidderId
+        if (!raider) {
+          log.push(entry('ruim', 'Não há oferta aberta contra essa empresa.'))
+          return
+        }
+        const issued = poisonPill(company, raider, DEFENSE.poisonPillIssue)
+        if (issued <= 0) {
+          log.push(entry('ruim', 'A emissão não foi possível.'))
+          return
+        }
+        player.blocksUsedToday += 1
+        applyControl(draft, company, log)
+        log.push(entry('bom', `${company.name} emitiu ações para diluir o comprador.`))
+        return
+      }
+
+      case 'cavaleiroBranco': {
+        const company = draft.companies[action.companyId]
+        if (!company || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        const shares = whiteKnight(company, action.allyId, DEFENSE.whiteKnightFloat)
+        if (shares <= 0) {
+          log.push(entry('ruim', 'Não há float livre para um aliado comprar.'))
+          return
+        }
+        player.blocksUsedToday += 1
+        applyControl(draft, company, log)
+        log.push(entry('bom', `Um aliado assumiu parte do float de ${company.name}.`))
+        return
+      }
+
+      case 'votarPolitica': {
+        const policy = draft.politics.policies[action.policyId]
+        if (!policy || policy.status !== 'tramitando') {
+          log.push(entry('ruim', 'Não há votação aberta para esse projeto.'))
+          return
+        }
+        if (!player.office) {
+          log.push(entry('ruim', 'Só quem ocupa cargo eletivo vota.'))
+          return
+        }
+        if (policy.playerVote !== null) {
+          log.push(entry('ruim', 'Você já votou nesse projeto.'))
+          return
+        }
+        // O peso do voto é o do cargo: vereador não move o que presidente move.
+        const weight = POLITICS.voteWeightByOffice[player.office] ?? 0
+        policy.playerVote = action.inFavor
+        policy.supportPct = clamp(policy.supportPct + (action.inFavor ? weight : -weight), 0, 1)
+        log.push(
+          entry('info', `Você votou ${action.inFavor ? 'a favor' : 'contra'}: ${policy.name}.`),
+        )
         return
       }
 

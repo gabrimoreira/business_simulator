@@ -289,6 +289,33 @@ export const MIGRATIONS: Record<number, Migration> = {
     save.saveVersion = 10
     return save
   },
+
+  /**
+   * 10 → 11: o jogador ganha voz na defesa e na votação.
+   *
+   * `Tender.playerAnswered` distingue "recusei" de "ainda não vi" — sem ele o
+   * aviso de oferta pendente reapareceria para sempre. `Policy.playerVote`
+   * guarda o voto de quem ocupa cargo eletivo. Save antigo nunca respondeu nem
+   * votou, então os dois entram no valor neutro.
+   */
+  10: (save) => {
+    if (Array.isArray(save.tenders)) {
+      for (const tender of save.tenders as RawSave[]) {
+        if (typeof tender.playerAnswered !== 'boolean') tender.playerAnswered = false
+      }
+    }
+
+    const politics = (save.politics ?? {}) as RawSave
+    const policies = (politics.policies ?? {}) as Record<string, RawSave>
+    for (const policy of Object.values(policies)) {
+      if (policy.playerVote === undefined) policy.playerVote = null
+    }
+    politics.policies = policies
+    save.politics = politics
+
+    save.saveVersion = 11
+    return save
+  },
 }
 
 export class SaveTooNewError extends Error {

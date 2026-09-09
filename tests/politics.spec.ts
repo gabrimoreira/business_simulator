@@ -20,6 +20,7 @@ function tabling(state: GameState, policyId: string, voteInDays = 60): GameState
     proposedDayIndex: state.date.dayIndex,
     voteDayIndex: state.date.dayIndex + voteInDays,
     beneficiaryIndustryIds: definition.beneficiaryIndustryIds,
+    playerVote: null,
   }
   return {
     ...state,
@@ -44,6 +45,7 @@ function enacted(state: GameState, policyId: string): GameState {
     proposedDayIndex: 0,
     voteDayIndex: 1,
     beneficiaryIndustryIds: definition.beneficiaryIndustryIds,
+    playerVote: null,
   }
   const next = {
     ...state,

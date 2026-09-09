@@ -501,6 +501,14 @@ export interface Tender {
   status: TenderStatus
   /** Aceitação acumulada dos acionistas NPC. */
   acceptedShares: number
+  /**
+   * O jogador já respondeu a esta oferta?
+   *
+   * Recusar é decisão, não inação: sem este campo não havia como distinguir
+   * "recusei" de "ainda não vi", e o aviso de oferta pendente reapareceria para
+   * sempre.
+   */
+  playerAnswered: boolean
 }
 
 export interface IpoPlan {
@@ -595,6 +603,8 @@ export interface Policy {
   voteDayIndex: number | null
   /** Quem beneficia — alimenta notoriety se for empresa do jogador. */
   beneficiaryIndustryIds: string[]
+  /** Voto do jogador, quando ele ocupa cargo eletivo. `null` = não votou. */
+  playerVote: boolean | null
 }
 
 export interface Donation {

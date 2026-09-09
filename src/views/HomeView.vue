@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import EmptyState from '@/components/EmptyState.vue'
 import HeadlineList from '@/components/HeadlineList.vue'
+import RoutineEditor from '@/components/RoutineEditor.vue'
 import ScreenTitle from '@/components/ScreenTitle.vue'
 import { useGameStore } from '@/stores/game'
 import { formatMoney, formatMoneyCompact } from '@/lib/format'
@@ -231,9 +232,10 @@ function advance(days: number): void {
           Um mês
         </button>
       </div>
-      <p class="px-1 pt-2 text-[11px] text-muted">
-        Executa sua rotina automaticamente e resume o que aconteceu.
+      <p class="px-1 pb-2 pt-2 text-[11px] text-muted">
+        Executa a rotina abaixo automaticamente e resume o que aconteceu.
       </p>
+      <RoutineEditor />
     </section>
 
     <section v-if="game.dayLog.length" class="px-4 pt-4">

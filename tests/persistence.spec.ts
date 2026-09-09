@@ -37,34 +37,79 @@ describe('serialização', () => {
 })
 
 describe('migrations', () => {
+  /**
+   * Põe uma oferta e um projeto no save antes de rebaixá-lo.
+   *
+   * Sem isto o teste era **vazio**: o estado inicial nasce com zero `tenders` e
+   * zero `policies`, então os laços de asserção não percorriam nada e a
+   * migration passava sem ser exercida.
+   */
+  function withTenderAndPolicy(save: Record<string, unknown>): Record<string, unknown> {
+    save.tenders = [
+      {
+        id: 'opa-teste',
+        companyId: 'pulso',
+        bidderId: 'tycoon-teste',
+        premium: 0.4,
+        pricePerShare: 10,
+        sharesSought: 1000,
+        hostile: true,
+        openedDayIndex: 1,
+        expiresDayIndex: 30,
+        status: 'aberta',
+        acceptedShares: 0,
+        playerAnswered: false,
+      },
+    ]
+    const politics = save.politics as Record<string, unknown>
+    politics.policies = {
+      'reforma-tributaria': {
+        id: 'reforma-tributaria',
+        name: 'Reforma tributária',
+        effects: {},
+        sponsorId: 'moraes',
+        status: 'tramitando',
+        supportPct: 0.4,
+        proposedDayIndex: 1,
+        voteDayIndex: 60,
+        beneficiaryIndustryIds: [],
+        playerVote: null,
+      },
+    }
+    politics.policyOrder = ['reforma-tributaria']
+    return save
+  }
+
   /** Desfaz na mão o que a migration N-1 → N deve refazer. */
   function migrated0(save: Record<string, unknown>): Record<string, unknown> {
-    // Volta à versão 9: sem bens pessoais nem ranking.
-    delete save.personalAssets
-    const meta = save.meta as Record<string, unknown>
-    delete meta.ranking
-    delete meta.unlockedArchetypes
+    // Volta à versão 10: oferta sem resposta do jogador e projeto sem voto dele.
+    const tenders = save.tenders as Array<Record<string, unknown>>
+    for (const tender of tenders) delete tender.playerAnswered
+    const politics = save.politics as Record<string, unknown>
+    const policies = politics.policies as Record<string, Record<string, unknown>>
+    for (const policy of Object.values(policies)) delete policy.playerVote
     return save
   }
 
   it('save da versão N-1 carrega na versão N', () => {
     const legacy = JSON.parse(toJson(fixture())) as Record<string, unknown>
     legacy.saveVersion = SAVE_VERSION - 1
-    // A migration mais nova (4 → 5) trocou a lista de funcionários pelo quadro
-    // agregado e deu capital instalado a cada empresa. Um save da versão N-1 é
-    // um save com `employees` e sem `workforce`.
-    // A migration mais nova (9 → 10) trouxe os bens pessoais e o ranking. Sem a
-    // estrutura, o passo do jogador leria `undefined` na virada do mês.
-    migrated0(legacy)
+    // A migration mais nova (10 → 11) deu voz ao jogador na defesa e na
+    // votação: `Tender.playerAnswered` distingue "recusei" de "ainda não vi", e
+    // `Policy.playerVote` guarda o voto de quem tem cargo. Save antigo nunca
+    // respondeu nem votou, então os dois entram no valor neutro.
+    migrated0(withTenderAndPolicy(legacy))
 
     const migrated = migrate(legacy)
 
     expect(migrated.saveVersion).toBe(SAVE_VERSION)
-    expect(Array.isArray(migrated.personalAssets.assets)).toBe(true)
-    expect(migrated.personalAssets.residenceId).toBeNull()
-    expect(migrated.personalAssets.monthlyRent).toBeGreaterThan(0)
-    expect(migrated.meta.ranking).toEqual([])
-    expect(migrated.meta.unlockedArchetypes).toContain('comum')
+    // Garante que há o que verificar: o teste anterior percorria listas vazias.
+    expect(migrated.tenders.length).toBeGreaterThan(0)
+    expect(Object.keys(migrated.politics.policies).length).toBeGreaterThan(0)
+    for (const tender of migrated.tenders) expect(tender.playerAnswered).toBe(false)
+    for (const policy of Object.values(migrated.politics.policies)) {
+      expect(policy.playerVote).toBeNull()
+    }
   })
 
   it('percorre a cadeia inteira a partir da versão 0', () => {

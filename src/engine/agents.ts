@@ -576,6 +576,7 @@ function stepTycoons(draft: GameState, log: LogEntry[]): void {
       expiresDayIndex: draft.date.dayIndex + CONTROL.tenderDays,
       status: 'aberta',
       acceptedShares: 0,
+      playerAnswered: false,
     })
 
     draft.news.headlines.push({

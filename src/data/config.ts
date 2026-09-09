@@ -7,7 +7,7 @@
  */
 
 /** Versão do formato de save. Incrementar exige uma migration (§3.5). */
-export const SAVE_VERSION = 10
+export const SAVE_VERSION = 11
 
 // --- Tempo (GAME_DESIGN §3.1) ----------------------------------------------
 
@@ -691,6 +691,19 @@ export const POLITICS = {
     senador: { charisma: 70, reputation: 25, campaign: 2_000_000 },
     presidente: { charisma: 85, reputation: 45, campaign: 20_000_000 },
   } as Record<string, { charisma: number; reputation: number; campaign: number }>,
+
+  /**
+   * Peso do voto do jogador no apoio a um projeto, por cargo.
+   *
+   * Vereador quase não move a agulha; presidente decide. É o que dá sentido a
+   * subir na carreira política em vez de parar no primeiro cargo elegível.
+   */
+  voteWeightByOffice: {
+    vereador: 0.02,
+    deputado: 0.06,
+    senador: 0.12,
+    presidente: 0.25,
+  } as Record<string, number>,
 
   /** Notoriedade cobrada quando uma política aprovada beneficia sua empresa. */
   notorietyPerTailoredPolicy: 15,
