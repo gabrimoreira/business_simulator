@@ -20,6 +20,7 @@ import {
   MEALS_PER_DAY,
 } from '../data/config'
 import { MEALS } from '../data/living'
+import { nominal } from './macro'
 
 function actionFor(kind: ActionBlockKind): GameAction | null {
   switch (kind) {
@@ -55,7 +56,9 @@ function autoEat(state: GameState): { state: GameState; log: LogEntry[] } {
     current.player.hunger < AUTOPLAY_HUNGER_THRESHOLD &&
     current.player.mealsToday < MEALS_PER_DAY
   ) {
-    const affordable = MEALS.filter((meal) => meal.cost <= current.player.money)
+    const affordable = MEALS.filter(
+      (meal) => nominal(current.macro, meal.cost) <= current.player.money,
+    )
     // A mais barata que realmente mata a fome; se nenhuma couber no bolso, a que
     // mais alimenta entre as possíveis. Comer sempre marmita é morte lenta:
     // ela restaura menos que o consumo diário e ainda tira saúde.

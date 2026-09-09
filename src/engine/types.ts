@@ -159,6 +159,13 @@ export interface MacroState {
   /** Desvio do produto potencial, entra na regra de reação do banco central. */
   outputGap: number
   nextMeetingDayIndex: number
+  /**
+   * Índice de preços acumulado, base 1,0 no primeiro dia. Toda constante de
+   * `src/data/` está em R$ do ano 0 e é convertida para nominal multiplicando
+   * por aqui — sem isso, 30 anos de inflação transformam o aluguel em troco e o
+   * jogador fica rico por acidente.
+   */
+  priceLevel: number
 }
 
 /** Macro como o público vê: com lag de divulgação (§5.12 Regra 2). */

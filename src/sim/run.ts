@@ -8,7 +8,7 @@
  * medindo um jogo que ninguém joga.
  */
 import { createInitialState } from '@/engine/newGame'
-import { netWorth } from '@/engine/selectors'
+import { bankBalance, netWorth, realNetWorth } from '@/engine/selectors'
 import { applyAction } from '@/engine/actions'
 import { runDays } from '@/engine/autoplay'
 import type { GameState } from '@/engine/types'
@@ -47,38 +47,50 @@ const COLUMNS = [
   'date',
   'age',
   'netWorth',
+  'realNetWorth',
   'money',
+  'bank',
   'job',
   'salary',
-  'energy',
+  'score',
+  'debt',
   'health',
   'mood',
-  'hunger',
   'courses',
-  'overdue',
+  'cycle',
   'selic',
   'inflation',
+  'priceLevel',
+  'unemployment',
 ] as const
 
 function row(state: GameState): string {
   const { date, player, macro } = state
   const job = player.currentJobId ? findJob(player.currentJobId) : null
+  const debt =
+    state.banking.loans.reduce((sum, loan) => sum + loan.remaining, 0) +
+    state.banking.cards.reduce((sum, card) => sum + card.balance, 0) +
+    player.overdueBills
   return [
     date.dayIndex,
     `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`,
     player.age,
     netWorth(state).toFixed(2),
+    realNetWorth(state).toFixed(2),
     player.money.toFixed(2),
+    bankBalance(state).toFixed(2),
     job ? job.id : '-',
     player.career.salary.toFixed(2),
-    player.energy.toFixed(1),
+    player.creditScore.toFixed(0),
+    debt.toFixed(2),
     player.health.toFixed(1),
     player.mood.toFixed(1),
-    player.hunger.toFixed(1),
     player.education.length,
-    player.overdueBills.toFixed(2),
+    macro.cyclePhase,
     macro.selic.toFixed(4),
     macro.inflation.toFixed(4),
+    macro.priceLevel.toFixed(3),
+    macro.unemployment.toFixed(4),
   ].join(',')
 }
 
@@ -117,7 +129,11 @@ function main(): void {
 
   const summary = [
     `${options.strategy}: ${daysLived} dias, seed ${options.seed}`,
-    `patrimônio final ${netWorth(state).toFixed(2)}`,
+    `patrimônio nominal ${netWorth(state).toFixed(2)}`,
+    `real ${realNetWorth(state).toFixed(2)}`,
+    `score ${state.player.creditScore.toFixed(0)}`,
+    `selic ${(state.macro.selic * 100).toFixed(2)}%`,
+    `inflação ${(state.macro.inflation * 100).toFixed(2)}%`,
     `saúde média ${(healthSum / daysLived).toFixed(1)}`,
     `humor médio ${(moodSum / daysLived).toFixed(1)}`,
     `cursos ${state.player.education.length}`,

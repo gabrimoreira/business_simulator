@@ -19,13 +19,12 @@
 import { produce } from 'immer'
 import type { DayLog, GameState, LogEntry, TickResult } from './types'
 import { stepClock, type DayMarkers } from './clock'
+import { stepMacro } from './macro'
+import { stepBanking } from './banking'
 import { stepPlayer } from './player'
 import { LOG_WINDOW_SIZE } from '../data/config'
 
 /* eslint-disable @typescript-eslint/no-unused-vars -- passos ainda vazios */
-
-/** Passo 2 — ciclo, Selic, inflação, confiança. Fase 2. */
-function stepMacro(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]): void {}
 
 /** Passo 3 — sorteio de eventos do mundo e rumores. Fase 4. */
 function stepEvents(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]): void {}
@@ -38,9 +37,6 @@ function stepCompanies(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]
 
 /** Passo 6 — precificação de ações e execução de ordens. Fase 3. */
 function stepMarket(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]): void {}
-
-/** Passo 7 — juros, parcelas, margin call. Fase 2. */
-function stepBanking(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]): void {}
 
 /** Passo 8 — aprovação, tramitação, eleições. Fase 7. */
 function stepPolitics(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]): void {}

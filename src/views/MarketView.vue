@@ -16,8 +16,8 @@ const macro = computed(() => game.state?.macro ?? null)
     <section v-if="macro" class="px-4 pt-3">
       <div class="grid grid-cols-3 gap-2">
         <div class="rounded-xl border border-line bg-surface px-3 py-2.5">
-          <p class="text-[11px] text-muted">Índice</p>
-          <p class="tnum text-base font-semibold">{{ macro.marketIndex.toFixed(0) }}</p>
+          <p class="text-[11px] text-muted">Ciclo</p>
+          <p class="text-base font-semibold capitalize">{{ macro.cyclePhase }}</p>
         </div>
         <div class="rounded-xl border border-line bg-surface px-3 py-2.5">
           <p class="text-[11px] text-muted">Selic</p>

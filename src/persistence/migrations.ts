@@ -55,6 +55,18 @@ export const MIGRATIONS: Record<number, Migration> = {
     save.saveVersion = 2
     return save
   },
+
+  /**
+   * 2 → 3: a Fase 2 pôs a inflação para andar. Sem `priceLevel`, todo preço em
+   * R$ do ano 0 ficaria congelado enquanto o salário sobe.
+   */
+  2: (save) => {
+    const macro = (save.macro ?? {}) as RawSave
+    if (typeof macro.priceLevel !== 'number') macro.priceLevel = 1
+    save.macro = macro
+    save.saveVersion = 3
+    return save
+  },
 }
 
 export class SaveTooNewError extends Error {

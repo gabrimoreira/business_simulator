@@ -4,6 +4,7 @@
  * concretos hoje (spec §10.6).
  */
 import type { GameState } from './types'
+import { real } from './macro'
 
 /** Caixa em conta corrente + aplicações, somando todos os bancos. */
 export function bankBalance(state: GameState): number {
@@ -73,4 +74,9 @@ export function dailyIncome(state: GameState): number {
   const salary = state.player.career.salary / 30
   const rents = state.personalAssets.assets.reduce((sum, asset) => sum + asset.monthlyIncome / 30, 0)
   return salary + rents
+}
+
+/** Patrimônio em R$ do ano 0 — a única medida comparável ao longo de 47 anos. */
+export function realNetWorth(state: GameState): number {
+  return real(state.macro, netWorth(state))
 }

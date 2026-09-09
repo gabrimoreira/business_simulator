@@ -7,7 +7,7 @@
  */
 
 /** Versão do formato de save. Incrementar exige uma migration (§3.5). */
-export const SAVE_VERSION = 2
+export const SAVE_VERSION = 3
 
 // --- Tempo (GAME_DESIGN §3.1) ----------------------------------------------
 
@@ -169,3 +169,79 @@ export const AUTOPLAY_TARGET_HUNGER = 80
 
 /** Teto de refeições por dia. */
 export const MEALS_PER_DAY = 3
+
+// --- Macroeconomia (GAME_DESIGN §3.6) --------------------------------------
+
+export const MACRO = {
+  /** Duração sorteada de cada fase, em dias. Ciclo completo de 2 a 7 anos. */
+  cycleDurations: {
+    expansao: [540, 1460],
+    pico: [90, 270],
+    recessao: [180, 540],
+    recuperacao: [270, 730],
+  },
+  confidenceTarget: { expansao: 70, pico: 85, recessao: 30, recuperacao: 55 },
+  /** Fator de demanda por fase — consumido pelas empresas a partir da Fase 5. */
+  demandFactor: { expansao: 1.1, pico: 1.18, recessao: 0.8, recuperacao: 0.95 },
+  unemploymentTarget: { expansao: 0.07, pico: 0.05, recessao: 0.14, recuperacao: 0.09 },
+  outputGapTarget: { expansao: 0.01, pico: 0.03, recessao: -0.03, recuperacao: -0.01 },
+
+  /** Velocidades de convergência por dia. */
+  confidenceSpeed: 0.5,
+  unemploymentSpeed: 0.0015,
+  outputGapSpeed: 0.0006,
+
+  /**
+   * Inflação persegue um nível de equilíbrio: meta + pressão de demanda − juro
+   * real. É o sinal negativo do juro real que impede a espiral.
+   */
+  inflationSpeed: 1 / 365,
+  inflationPassthrough: 0.35,
+  inflationSelicWeight: 0.25,
+  inflationNoise: 0.0009,
+  inflationMin: -0.02,
+  inflationMax: 0.3,
+
+  /** Regra de reação do banco central (Taylor simplificada). */
+  neutralRealRate: 0.03,
+  taylorInflationWeight: 1.5,
+  taylorGapWeight: 0.8,
+  /** Fração do gap fechada em cada reunião. */
+  selicSmoothing: 0.25,
+  selicMin: 0.02,
+  selicMax: 0.3,
+
+  /** Choque: pular a fase de pico e cair direto em recessão. */
+  shockFromExpansionChance: 0.2,
+  /** Recaída: voltar da recuperação para a recessão. */
+  doubleDipChance: 0.12,
+} as const
+
+// --- Bancos (GAME_DESIGN §3.8) ---------------------------------------------
+
+export const BANKING = {
+  /** Penalidade de taxa por score baixo, somada ao spread do banco. */
+  scoreRatePenaltyMax: 0.12,
+  scoreRateReference: 650,
+  /** Score. */
+  scoreMin: 0,
+  scoreMax: 1000,
+  scoreCleanRecoveryPerDay: 0.3,
+  /**
+   * Teto da recuperação passiva. Acima disto o score só sobe com histórico de
+   * crédito de verdade — quem nunca tomou nada emprestado não é cliente
+   * preferencial de banco nenhum, e sem esse teto o score chegava a 1000 no
+   * ano 8 sem o jogador nunca ter pego um empréstimo.
+   */
+  scoreCleanRecoveryCeiling: 700,
+  scoreOnTimePaymentPerDay: 0.05,
+  scoreLoanSettledBonus: 25,
+  scoreLatePenalty: 60,
+  scoreLateAfterDays: 30,
+  scoreBankruptcyPenalty: 150,
+  /** Alavancagem acima de 4× a renda mensal começa a custar score. */
+  leverageFreeMultiple: 4,
+  scoreLeveragePenaltyPerStep: 1,
+  /** Dia do mês em que a fatura do cartão fecha. */
+  cardStatementDay: 20,
+} as const

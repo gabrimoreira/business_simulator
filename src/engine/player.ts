@@ -7,6 +7,8 @@ import type { DayMarkers } from './clock'
 import { CAREER, VITALS } from '../data/config'
 import { MONTHLY_BILLS } from '../data/living'
 import { findJob } from '../data/jobs'
+import { nominal } from './macro'
+import { debit } from './banking'
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -59,10 +61,11 @@ function payday(draft: GameState, log: LogEntry[]): void {
 /** Quita o que estiver atrasado assim que entra dinheiro. */
 function settleOverdue(draft: GameState, log: LogEntry[]): void {
   const { player } = draft
-  if (player.overdueBills <= 0 || player.money <= 0) return
-  const paid = Math.min(player.overdueBills, player.money)
-  player.money -= paid
-  player.overdueBills -= paid
+  if (player.overdueBills <= 0) return
+  const unpaid = debit(draft, player.overdueBills)
+  const paid = player.overdueBills - unpaid
+  if (paid <= 0) return
+  player.overdueBills = unpaid
   log.push({
     id: `overdue-pay-${draft.date.dayIndex}`,
     dayIndex: draft.date.dayIndex,
@@ -75,10 +78,23 @@ function settleOverdue(draft: GameState, log: LogEntry[]): void {
 
 function billsDay(draft: GameState, log: LogEntry[]): void {
   const { player, personalAssets } = draft
-  const total = personalAssets.monthlyRent + MONTHLY_BILLS.transport + MONTHLY_BILLS.health
-  const paid = Math.min(total, player.money)
-  player.money -= paid
-  const unpaid = total - paid
+  // As constantes estão em R$ do ano 0: convertidas para o nominal de hoje.
+  const total = nominal(
+    draft.macro,
+    personalAssets.monthlyRent + MONTHLY_BILLS.transport + MONTHLY_BILLS.health,
+  )
+  let unpaid = debit(draft, total)
+
+  // Sobrou conta? O cartão cobre o rombo — a um custo que dói depois.
+  for (const card of draft.banking.cards) {
+    if (unpaid <= 0) break
+    const room = Math.max(0, card.limit - card.balance)
+    const charged = Math.min(room, unpaid)
+    card.balance += charged
+    unpaid -= charged
+  }
+
+  const paid = total - unpaid
   if (unpaid > 0) {
     player.overdueBills += unpaid
     log.push({

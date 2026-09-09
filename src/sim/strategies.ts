@@ -6,7 +6,9 @@
 import type { ActionBlockKind, GameAction, GameState } from '@/engine/types'
 import { JOBS } from '@/data/jobs'
 import { COURSES } from '@/data/courses'
+import { BANKS } from '@/data/banks'
 import { jobEligibility } from '@/engine/player'
+import { nominal } from '@/engine/macro'
 
 /** Reserva de sobrevivência antes de gastar com matrícula: ~2 meses de custo. */
 const SURVIVAL_BUFFER = 3000
@@ -28,6 +30,8 @@ export interface Strategy {
   coursePlan: string[]
   /** Intervalo entre tentativas de vaga, para não torrar o RNG todo dia. */
   applyEveryDays: number
+  /** Aplica o excedente acima da reserva no banco de melhor rendimento. */
+  savesInBank: boolean
 }
 
 const STRATEGIES: Record<StrategyId, Strategy> = {
@@ -42,12 +46,16 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     routine: ['trabalhar', 'socializar', 'lazer'],
     coursePlan: [],
     applyEveryDays: 30,
+    // "Só trabalha" também guarda o que sobra: deixar dinheiro parado embaixo do
+    // colchão não é uma estratégia, é um bug de comportamento.
+    savesInBank: true,
   },
   investor: {
     id: 'investor',
     routine: ['trabalhar', 'lazer', 'estudar'],
     coursePlan: ['tecnico', 'graduacao', 'pos', 'mba'],
     applyEveryDays: 30,
+    savesInBank: true,
   },
   // As três abaixo ainda se comportam como `investor`; ganham corpo nas fases
   // 3, 5 e 6.
@@ -56,24 +64,28 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     routine: ['trabalhar', 'estudar', 'lazer'],
     coursePlan: ['tecnico', 'graduacao'],
     applyEveryDays: 30,
+    savesInBank: true,
   },
   tycoon: {
     id: 'tycoon',
     routine: ['trabalhar', 'estudar', 'socializar'],
     coursePlan: ['oratoria', 'graduacao', 'mba'],
     applyEveryDays: 30,
+    savesInBank: true,
   },
   pricewar: {
     id: 'pricewar',
     routine: ['trabalhar', 'trabalhar', 'lazer'],
     coursePlan: [],
     applyEveryDays: 30,
+    savesInBank: true,
   },
   raider: {
     id: 'raider',
     routine: ['trabalhar', 'estudar', 'lazer'],
     coursePlan: ['financas', 'graduacao'],
     applyEveryDays: 30,
+    savesInBank: true,
   },
 }
 
@@ -108,8 +120,41 @@ export function decideActions(state: GameState, strategy: Strategy): GameAction[
     const course = next ? COURSES.find((item) => item.id === next) : undefined
     // Matricular gastando o último centavo mata de fome antes do primeiro
     // diploma: guarda uns meses de custo de vida antes de pagar a matrícula.
-    if (course && player.money >= course.cost + SURVIVAL_BUFFER) {
-      actions.push({ kind: 'matricular', courseId: course.id })
+    const cost = course ? nominal(state.macro, course.cost) : 0
+    const buffer = nominal(state.macro, SURVIVAL_BUFFER)
+    if (course) {
+      if (player.money >= cost + buffer) {
+        actions.push({ kind: 'matricular', courseId: course.id })
+      } else {
+        // O dinheiro está aplicado: resgata o que falta antes de se matricular.
+        // Sem isto a estratégia guardava tudo no banco e nunca estudava — foi o
+        // que fez o `investor` terminar 47 anos sem um único diploma.
+        const needed = cost + buffer - player.money
+        const liquid = state.banking.accounts.find(
+          (account) =>
+            account.savings >= needed &&
+            (account.savingsLockedUntilDayIndex === null ||
+              state.date.dayIndex >= account.savingsLockedUntilDayIndex),
+        )
+        if (liquid) {
+          actions.push({ kind: 'resgatar', bankId: liquid.bankId, amount: needed })
+        }
+      }
+    }
+  }
+
+  // Aplica o excedente. Escolhe o melhor rendimento entre os bancos em que o
+  // score dá acesso — é a decisão que o jogador toma na aba Mundo.
+  if (strategy.savesInBank && state.date.dayIndex % 30 === 5) {
+    const buffer = nominal(state.macro, SURVIVAL_BUFFER)
+    const surplus = player.money - buffer
+    if (surplus > 0) {
+      const bank = [...BANKS]
+        .filter((item) => player.creditScore >= item.minScore)
+        // Carência prende o dinheiro: só vale a pena com folga de caixa.
+        .filter((item) => item.lockDays === 0 || surplus > buffer)
+        .sort((a, b) => b.savingsFactor - a.savingsFactor)[0]
+      if (bank) actions.push({ kind: 'aplicar', bankId: bank.id, amount: surplus })
     }
   }
 

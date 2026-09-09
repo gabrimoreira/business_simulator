@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialState } from '@/engine/newGame'
 import { applyAction } from '@/engine/actions'
 import { runDays } from '@/engine/autoplay'
 import { worldTick } from '@/engine/tick'
@@ -9,42 +8,7 @@ import { assertPureJson } from '@/persistence/serialize'
 import { decideActions, getStrategy } from '@/sim/strategies'
 import { ACTION_BLOCKS_PER_DAY } from '@/data/config'
 import type { GameAction, GameState } from '@/engine/types'
-
-function fresh(seed = 42): GameState {
-  return createInitialState({ seed, playerName: 'Teste', now: 0 })
-}
-
-/** Insiste na candidatura até ser contratado — a chance é ~39% por tentativa. */
-function hire(state: GameState, jobId = 'atendente'): GameState {
-  let current = state
-  for (let i = 0; i < 60 && !current.player.currentJobId; i += 1) {
-    current = applyAction(current, { kind: 'candidatar', jobId }).state
-  }
-  if (!current.player.currentJobId) throw new Error('não foi contratado em 60 tentativas')
-  return current
-}
-
-/**
- * Um dia de vida: come o necessário e avança o tick. Sem comer, qualquer teste
- * longo morre de fome no dia ~35 e o tick para de avançar — o que já custou
- * quatro testes enganosos.
- */
-function liveDay(state: GameState, action?: GameAction): { state: GameState; entries: GameState['log'] } {
-  let current = state
-  while (current.player.hunger < 60 && current.player.mealsToday < 3) {
-    const before = current
-    current = applyAction(current, { kind: 'comer', mealId: 'normal' }).state
-    if (current === before) break
-  }
-  if (action) current = applyAction(current, action).state
-  const result = worldTick(current, 1)
-  return { state: result.state, entries: result.log[0]?.entries ?? [] }
-}
-
-/** Estado com dinheiro de sobra, para testar regras que não são sobre grana. */
-function funded(state: GameState, money = 1_000_000): GameState {
-  return { ...state, player: { ...state.player, money } }
-}
+import { fresh, funded, hire, liveDay } from './helpers'
 
 /** Roda a estratégia do runner, o mesmo caminho que a UI usa. */
 function simulate(days: number, strategyId: 'passive' | 'investor' = 'passive', seed = 42): GameState {
@@ -207,7 +171,12 @@ describe('salário e contas', () => {
     let state = funded(hire(fresh()))
     const before = state.player.career.salary
     for (let day = 0; day < 400; day += 1) state = liveDay(state).state
-    expect(state.player.career.salary).toBeCloseTo(before * (1 + state.macro.inflation), 2)
+
+    // A inflação anda todo dia a partir da Fase 2, então o reajuste é comparado
+    // com a faixa plausível, não com um número fixo.
+    const raise = state.player.career.salary / before - 1
+    expect(raise).toBeGreaterThan(0.01)
+    expect(raise).toBeLessThan(0.1)
   })
 
   it('conta não paga vira pendência e é quitada quando entra dinheiro', () => {

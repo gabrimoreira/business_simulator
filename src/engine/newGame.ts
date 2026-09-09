@@ -71,6 +71,7 @@ function initialMacro(): MacroState {
     unemployment: INITIAL_MACRO.unemployment,
     outputGap: 0,
     nextMeetingDayIndex: CENTRAL_BANK_MEETING_DAYS,
+    priceLevel: 1,
   }
 }
 

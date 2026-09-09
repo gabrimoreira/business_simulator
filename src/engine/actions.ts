@@ -13,6 +13,19 @@ import { findJob } from '../data/jobs'
 import { findCourse } from '../data/courses'
 import { chance } from './rng'
 import { clamp, hireChance, jobEligibility, performanceGain, workEnergyCost } from './player'
+import { nominal } from './macro'
+import {
+  amortizingPayment,
+  availableCash,
+  creditLimitFor,
+  debit,
+  findAccount,
+  loanRateFor,
+  monthlyIncome,
+  savingsRateFor,
+} from './banking'
+import { findBank } from '../data/banks'
+import { BANKING } from '../data/config'
 
 const clampVital = (value: number): number => clamp(value, 0, VITALS.max)
 
@@ -173,17 +186,18 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
           log.push(entry('ruim', 'Você já comeu o bastante hoje.'))
           return
         }
-        if (player.money < meal.cost) {
+        const mealCost = nominal(draft.macro, meal.cost)
+        if (player.money < mealCost) {
           log.push(entry('ruim', 'Dinheiro insuficiente.'))
           return
         }
-        player.money -= meal.cost
+        player.money -= mealCost
         player.mealsToday += 1
         player.hunger = clampVital(player.hunger + meal.hunger)
         player.health = clampVital(player.health + meal.health)
         player.mood = clampVital(player.mood + meal.mood)
         player.energy = clampVital(player.energy + meal.energy)
-        log.push(entry('info', meal.name, -meal.cost))
+        log.push(entry('info', meal.name, -mealCost))
         return
       }
 
@@ -206,13 +220,14 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
           log.push(entry('ruim', `Exige ${missingRequisite} concluído.`))
           return
         }
-        if (player.money < course.cost) {
+        const courseCost = nominal(draft.macro, course.cost)
+        if (availableCash(state) < courseCost) {
           log.push(entry('ruim', 'Dinheiro insuficiente para a matrícula.'))
           return
         }
-        player.money -= course.cost
+        debit(draft, courseCost)
         player.activeCourse = { courseId: course.id, daysDone: 0 }
-        log.push(entry('info', `Matriculado em ${course.name}.`, -course.cost))
+        log.push(entry('info', `Matriculado em ${course.name}.`, -courseCost))
         return
       }
 
@@ -240,7 +255,7 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         }
         player.currentJobId = job.id
         player.career.jobId = job.id
-        player.career.salary = job.salary
+        player.career.salary = nominal(draft.macro, job.salary)
         player.career.daysInJob = 0
         player.career.daysSinceLastRaise = 0
         player.career.performance = 50
@@ -269,6 +284,193 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         }
         player.routine = action.routine.slice(0, ACTION_BLOCKS_PER_DAY)
         log.push(entry('info', 'Rotina atualizada.'))
+        return
+      }
+
+      case 'depositar':
+      case 'aplicar': {
+        const bank = findBank(action.bankId)
+        if (!bank) {
+          log.push(entry('ruim', 'Banco desconhecido.'))
+          return
+        }
+        if (player.creditScore < bank.minScore) {
+          log.push(entry('ruim', `${bank.name} exige score ${bank.minScore}.`))
+          return
+        }
+        if (action.amount <= 0 || player.money < action.amount) {
+          log.push(entry('ruim', 'Valor indisponível em caixa.'))
+          return
+        }
+
+        // Depositar em banco onde não há conta abre a conta: não existe ação
+        // separada de abertura, e o gesto do jogador é o mesmo.
+        let account = draft.banking.accounts.find((item) => item.bankId === bank.id)
+        if (!account) {
+          account = {
+            bankId: bank.id,
+            checking: 0,
+            savings: 0,
+            savingsRate: savingsRateFor(state, bank),
+            savingsLockedUntilDayIndex: null,
+          }
+          draft.banking.accounts.push(account)
+        }
+
+        player.money -= action.amount
+        if (action.kind === 'depositar') {
+          account.checking += action.amount
+          log.push(entry('info', `Depósito em ${bank.name}.`, -action.amount))
+        } else {
+          const wasEmpty = account.savings <= 0
+          account.savings += action.amount
+          account.savingsRate = savingsRateFor(state, bank)
+          // A carência conta a partir do primeiro aporte e **não** é renovada
+          // por aportes seguintes: renovar prendia o dinheiro para sempre em
+          // quem aplica todo mês, e nada na tela avisaria.
+          if (bank.lockDays > 0 && wasEmpty) {
+            account.savingsLockedUntilDayIndex = draft.date.dayIndex + bank.lockDays
+          }
+          log.push(entry('info', `Aplicado em ${bank.name}.`, -action.amount))
+        }
+        return
+      }
+
+      case 'sacar':
+      case 'resgatar': {
+        const account = findAccount(state, action.bankId)
+        const bank = findBank(action.bankId)
+        if (!account || !bank) {
+          log.push(entry('ruim', 'Você não tem conta nesse banco.'))
+          return
+        }
+        const draftAccount = draft.banking.accounts.find((item) => item.bankId === action.bankId)
+        if (!draftAccount) return
+
+        if (action.kind === 'sacar') {
+          if (action.amount <= 0 || draftAccount.checking < action.amount) {
+            log.push(entry('ruim', 'Saldo insuficiente em conta.'))
+            return
+          }
+          draftAccount.checking -= action.amount
+          player.money += action.amount
+          log.push(entry('info', `Saque em ${bank.name}.`, action.amount))
+          return
+        }
+
+        if (
+          account.savingsLockedUntilDayIndex !== null &&
+          draft.date.dayIndex < account.savingsLockedUntilDayIndex
+        ) {
+          const days = account.savingsLockedUntilDayIndex - draft.date.dayIndex
+          log.push(entry('ruim', `Aplicação em carência por mais ${days} dias.`))
+          return
+        }
+        if (action.amount <= 0 || draftAccount.savings < action.amount) {
+          log.push(entry('ruim', 'Saldo insuficiente na aplicação.'))
+          return
+        }
+        draftAccount.savings -= action.amount
+        player.money += action.amount
+        if (draftAccount.savings <= 0) draftAccount.savingsLockedUntilDayIndex = null
+        log.push(entry('info', `Resgate em ${bank.name}.`, action.amount))
+        return
+      }
+
+      case 'tomarEmprestimo': {
+        const bank = findBank(action.bankId)
+        if (!bank) {
+          log.push(entry('ruim', 'Banco desconhecido.'))
+          return
+        }
+        if (player.creditScore < bank.minScore) {
+          log.push(entry('ruim', `${bank.name} exige score ${bank.minScore}.`))
+          return
+        }
+        if (monthlyIncome(state) <= 0) {
+          log.push(entry('ruim', 'Sem renda comprovada, nenhum banco empresta.'))
+          return
+        }
+        const limit = creditLimitFor(state, bank)
+        if (action.amount <= 0 || action.amount > limit) {
+          log.push(entry('ruim', `Limite disponível em ${bank.name} é menor que o pedido.`))
+          return
+        }
+        if (action.termDays <= 0) {
+          log.push(entry('ruim', 'Prazo inválido.'))
+          return
+        }
+
+        const rate = loanRateFor(state, bank)
+        draft.banking.loans.push({
+          id: `loan-${bank.id}-${draft.date.dayIndex}-${draft.banking.loans.length}`,
+          bankId: bank.id,
+          kind: action.loanKind,
+          borrower: 'player',
+          principal: action.amount,
+          rate,
+          termDays: action.termDays,
+          remaining: action.amount,
+          dailyPayment: amortizingPayment(action.amount, rate, action.termDays),
+          nextDueDayIndex: draft.date.dayIndex + 1,
+          daysOverdue: 0,
+          collateral: null,
+        })
+        player.money += action.amount
+        log.push(
+          entry(
+            'info',
+            `Empréstimo em ${bank.name} a ${(rate * 100).toFixed(1)}% ao ano.`,
+            action.amount,
+          ),
+        )
+        return
+      }
+
+      case 'pagarEmprestimo': {
+        const loan = draft.banking.loans.find((item) => item.id === action.loanId)
+        if (!loan) {
+          log.push(entry('ruim', 'Empréstimo não encontrado.'))
+          return
+        }
+        const amount = Math.min(action.amount, loan.remaining)
+        if (amount <= 0 || availableCash(state) < amount) {
+          log.push(entry('ruim', 'Dinheiro insuficiente.'))
+          return
+        }
+        debit(draft, amount)
+        loan.remaining -= amount
+        log.push(entry('bom', 'Amortização de empréstimo.', -amount))
+        return
+      }
+
+      case 'contratarCartao': {
+        const bank = findBank(action.bankId)
+        if (!bank) {
+          log.push(entry('ruim', 'Banco desconhecido.'))
+          return
+        }
+        if (draft.banking.cards.some((card) => card.bankId === bank.id)) {
+          log.push(entry('ruim', 'Você já tem cartão nesse banco.'))
+          return
+        }
+        if (player.creditScore < bank.minScore) {
+          log.push(entry('ruim', `${bank.name} exige score ${bank.minScore}.`))
+          return
+        }
+        const limit = monthlyIncome(state) * bank.cardLimitMultiple
+        if (limit <= 0) {
+          log.push(entry('ruim', 'Sem renda comprovada, nenhum banco dá cartão.'))
+          return
+        }
+        draft.banking.cards.push({
+          bankId: bank.id,
+          limit,
+          balance: 0,
+          revolvingMonthlyRate: bank.cardMonthlyRate,
+          statementDay: BANKING.cardStatementDay,
+        })
+        log.push(entry('info', `Cartão ${bank.name} aprovado.`))
         return
       }
 

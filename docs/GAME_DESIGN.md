@@ -510,6 +510,13 @@ volatilidade e sem imposto modelado, torna "não jogar" uma estratégia viável.
 *Sintoma:* `passive` empatando ou batendo `investor` em 10 anos.
 *Alavanca:* fator de poupança (0,70–0,92 × Selic), carência do CDB, e IR
 regressivo sobre renda fixa se ainda faltar freio.
+*Medido na Fase 2:* aos 65 anos, `passive` termina com **R$ 1,14 M reais**
+(dentro da faixa de R$ 1,1–1,8 M do §2.1) e `investor` com **R$ 5,9 M reais**.
+A ordem está certa, mas o `investor` fica abaixo da sua faixa (R$ 20–70 M)
+porque a poupança rende 2–3% reais e a faixa pressupõe os 7–11% da bolsa, que
+só chega na Fase 3. **`passive` ainda supera `investor` aos 10 anos** — a
+mensalidade é paga antes de o salário maior chegar. Se isso sobreviver à
+Fase 3, o critério do §2.3 vale.
 
 **2. Jornal como impressora de dinheiro.** Comprar veículo, publicar matéria
 positiva sobre empresa própria, vender na alta, publicar negativa, recomprar.
@@ -634,6 +641,14 @@ existir engine para medi-los. Todos vieram do runner headless.
 | Lazer | +12 de humor | +8 | idem |
 | Trabalhar | sem efeito de humor | −1,5 de humor | sem custo, o trabalho não competia com nada |
 | Recuperação de saúde | não existia | +0,3/dia alimentado e descansado | sem ela, um episódio de fome era irreversível |
+
+### Ajustes da Fase 2
+
+| Constante | Antes | Depois | Por quê |
+|---|---|---|---|
+| Índice de preços | não existia | `macro.priceLevel`, composto pela inflação diária | toda constante de `src/data/` está em R$ do ano 0; sem índice, 30 anos de inflação transformam o aluguel em troco e o jogador fica rico por acidente |
+| Recuperação de score | sem teto | teto de 700 | quem nunca tomou crédito chegava a 1000 no ano 8; acima de 700 só com histórico real |
+| Carência do CDB | renovada a cada aporte | contada do primeiro aporte | aplicar todo mês prendia o dinheiro **para sempre**, e nada na tela avisava — o `investor` terminou 47 anos sem um único diploma por causa disso |
 
 **Consequência de design que apareceu na medição:** como o salário é mensal,
 trabalhar dois blocos no mesmo dia não rende nada além de desempenho para
