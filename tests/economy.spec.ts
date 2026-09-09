@@ -6,7 +6,7 @@ import { BANKS, findBank } from '@/data/banks'
 import { BANKING, MACRO } from '@/data/config'
 import type { CyclePhase } from '@/engine/types'
 import { worldTick } from '@/engine/tick'
-import { advance, employed, fresh, funded, liveDay, withMacro } from './helpers'
+import { advance, advanceAsync, employed, fresh, funded, withMacro } from './helpers'
 
 describe('macro', () => {
   it('a Selic sobe quando a inflação estoura a meta', () => {
@@ -28,30 +28,26 @@ describe('macro', () => {
     expect(after.macro.selic).toBeLessThan(0.14)
   })
 
-  it('mantém Selic e inflação dentro dos limites em 3650 dias', () => {
-    let state = funded(fresh())
+  it('mantém Selic e inflação dentro dos limites em 3650 dias', async () => {
     let minSelic = Infinity
     let maxSelic = -Infinity
-    for (let i = 0; i < 1800; i += 1) {
-      state = liveDay(state).state
-      minSelic = Math.min(minSelic, state.macro.selic)
-      maxSelic = Math.max(maxSelic, state.macro.selic)
-      expect(Number.isFinite(state.macro.inflation)).toBe(true)
-    }
+    const state = (
+      await advanceAsync(funded(fresh()), 1800, (day) => {
+        minSelic = Math.min(minSelic, day.macro.selic)
+        maxSelic = Math.max(maxSelic, day.macro.selic)
+        expect(Number.isFinite(day.macro.inflation)).toBe(true)
+      })
+    ).state
     expect(minSelic).toBeGreaterThanOrEqual(MACRO.selicMin)
     expect(maxSelic).toBeLessThanOrEqual(MACRO.selicMax)
     expect(state.macro.inflation).toBeGreaterThanOrEqual(MACRO.inflationMin)
     expect(state.macro.inflation).toBeLessThanOrEqual(MACRO.inflationMax)
   })
 
-  it('percorre as quatro fases do ciclo em 10 anos', () => {
-    let state = funded(fresh())
+  it('percorre as quatro fases do ciclo em 10 anos', async () => {
     const seen = new Set<CyclePhase>()
     // Aqui o horizonte **é** o teste: o ciclo completo leva de 2 a 7 anos.
-    for (let i = 0; i < 3650; i += 1) {
-      state = liveDay(state).state
-      seen.add(state.macro.cyclePhase)
-    }
+    await advanceAsync(funded(fresh()), 3650, (day) => seen.add(day.macro.cyclePhase))
     expect(seen.size).toBe(4)
   })
 
@@ -62,12 +58,12 @@ describe('macro', () => {
     expect(state.macro.priceLevel).toBeLessThan(1.2)
   })
 
-  it('o custo de vida sobe junto com os preços', () => {
+  it('o custo de vida sobe junto com os preços', async () => {
     const base = employed(fresh(), 5000, 100_000_000)
     const early = advance(base, 40)
     const earlyBill = early.entries.find((e) => e.text.includes('Contas do mês'))
 
-    const later = advance(early.state, 2200)
+    const later = await advanceAsync(early.state, 2200)
     const lateBill = [...later.entries].reverse().find((e) => e.text.includes('Contas do mês'))
 
     expect(earlyBill?.amount).toBeDefined()
@@ -217,8 +213,8 @@ describe('crédito', () => {
     expect(before - after.player.creditScore).toBeGreaterThanOrEqual(BANKING.scoreLatePenalty)
   })
 
-  it('a recuperação passiva de score para no teto sem histórico de crédito', () => {
-    const state = advance(employed(fresh(), 5000, 500_000), 1800).state
+  it('a recuperação passiva de score para no teto sem histórico de crédito', async () => {
+    const state = (await advanceAsync(employed(fresh(), 5000, 500_000), 1800)).state
     expect(state.player.creditScore).toBe(BANKING.scoreCleanRecoveryCeiling)
   })
 })

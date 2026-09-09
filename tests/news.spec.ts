@@ -4,7 +4,7 @@ import { EVENT_DEFS } from '@/data/events'
 import { NEWS_OUTLETS } from '@/data/newsOutlets'
 import { NEWS } from '@/data/config'
 import type { GameState, WorldEvent } from '@/engine/types'
-import { advance, fresh, funded, liveDay } from './helpers'
+import { advance, advanceAsync, fresh, funded, liveDay } from './helpers'
 
 const TARGET = 'nimbo'
 
@@ -39,15 +39,15 @@ function setShock(state: GameState, companyId: string, shock: number): GameState
 }
 
 describe('eventos', () => {
-  it('acontecem, e alguns nascem rumor', () => {
-    const state = advance(funded(fresh()), 730).state
+  it('acontecem, e alguns nascem rumor', async () => {
+    const state = (await advanceAsync(funded(fresh()), 730)).state
     const headlines = state.news.headlines
     expect(headlines.length).toBeGreaterThan(0)
     expect(headlines.some((headline) => headline.isRumor)).toBe(true)
   })
 
-  it('respeitam o cooldown do catálogo', () => {
-    const state = advance(funded(fresh()), 1460).state
+  it('respeitam o cooldown do catálogo', async () => {
+    const state = (await advanceAsync(funded(fresh()), 1460)).state
     // Nenhuma definição pode ter disparado duas vezes dentro do próprio cooldown.
     for (const def of EVENT_DEFS) {
       const fired = state.events.lastFiredDayIndex[def.id]
@@ -152,8 +152,8 @@ describe('imprensa', () => {
 })
 
 describe('qualidade editorial', () => {
-  it('quem apura melhor publica rumor mais confiável', () => {
-    const state = advance(funded(fresh(11)), 2200).state
+  it('quem apura melhor publica rumor mais confiável', async () => {
+    const state = (await advanceAsync(funded(fresh(11)), 2200)).state
     const rumors = state.news.headlines.filter((headline) => headline.isRumor)
     expect(rumors.length).toBeGreaterThan(8)
 
@@ -177,8 +177,8 @@ describe('qualidade editorial', () => {
     }
   })
 
-  it('o cooldown é por alvo: greve numa empresa não silencia as outras', () => {
-    const state = advance(funded(fresh()), 730).state
+  it('o cooldown é por alvo: greve numa empresa não silencia as outras', async () => {
+    const state = (await advanceAsync(funded(fresh()), 730)).state
     const keys = Object.keys(state.events.lastFiredDayIndex)
     // Chave composta `definicao:alvo`.
     expect(keys.every((key) => key.includes(':'))).toBe(true)
@@ -192,8 +192,8 @@ describe('qualidade editorial', () => {
     expect(Math.max(...byDefinition.values())).toBeGreaterThan(1)
   })
 
-  it('o feed continua vivo depois de anos', () => {
-    const state = advance(funded(fresh()), 1460).state
+  it('o feed continua vivo depois de anos', async () => {
+    const state = (await advanceAsync(funded(fresh()), 1460)).state
     const latest = Math.max(...state.news.headlines.map((headline) => headline.dayIndex))
     // A manchete mais recente não pode ter meses de idade.
     expect(state.date.dayIndex - latest).toBeLessThan(30)

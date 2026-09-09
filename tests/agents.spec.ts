@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { AI_PROFILES } from '@/data/aiProfiles'
 import { AI, OPERATIONS } from '@/data/config'
 import { findIndustry } from '@/data/industries'
@@ -6,13 +6,13 @@ import { unitCost } from '@/engine/companies'
 import { generateCandidates } from '@/engine/ai/companyAgent'
 import { passesGuardrails, passesHardRules, utility } from '@/engine/ai/utility'
 import type { ArchetypeId, GameState } from '@/engine/types'
-import { advance, fresh, funded } from './helpers'
+import { advanceAsync, fresh, funded } from './helpers'
 
 const SECTOR = { averagePrice: 1, minPrice: 0.95, leaderPrice: 1, leaderMarketingRatio: 0.05 }
 
 /** Cinco anos com todos os agentes ativos. */
-function played(seed = 42, days = 1500): GameState {
-  return advance(funded(fresh(seed), 5_000_000), days).state
+async function played(seed = 42, days = 1500): Promise<GameState> {
+  return (await advanceAsync(funded(fresh(seed), 5_000_000), days)).state
 }
 
 describe('regras duras', () => {
@@ -107,7 +107,12 @@ describe('guardrails globais', () => {
 })
 
 describe('comportamento em cinco anos', () => {
-  const state = played()
+  // Em `beforeAll`, não no escopo do `describe`: cinco anos de mundo levam
+  // minutos, e no escopo do módulo isso bloqueia a coleta do arquivo inteiro.
+  let state: GameState
+  beforeAll(async () => {
+    state = await played()
+  })
 
   it('nenhum NPC pratica preço abaixo do próprio piso de margem', () => {
     for (const id of state.companyOrder) {
@@ -171,8 +176,8 @@ describe('comportamento em cinco anos', () => {
 })
 
 describe('distinguibilidade dos arquétipos', () => {
-  it('arquétipos diferentes produzem perfis de decisão diferentes', () => {
-    const state = played(7, 1500)
+  it('arquétipos diferentes produzem perfis de decisão diferentes', async () => {
+    const state = await played(7, 1500)
 
     /** Assinatura observável de uma empresa: o que dá para ver de fora. */
     function signature(id: string): number[] {
@@ -244,14 +249,14 @@ describe('distinguibilidade dos arquétipos', () => {
 })
 
 describe('determinismo com agentes ativos', () => {
-  it('duas execuções idênticas dão o mesmo estado', () => {
-    expect(played(3, 400)).toEqual(played(3, 400))
+  it('duas execuções idênticas dão o mesmo estado', async () => {
+    expect(await played(3, 400)).toEqual(await played(3, 400))
   })
 })
 
 describe('capacidade e demanda continuam sãs', () => {
-  it('o nível de preço do setor fica ancorado', () => {
-    const state = played(11, 1500)
+  it('o nível de preço do setor fica ancorado', async () => {
+    const state = await played(11, 1500)
     for (const industryId of state.industryOrder) {
       const average = state.industries[industryId]!.averagePrice
       expect(average).toBeGreaterThan(0.5)

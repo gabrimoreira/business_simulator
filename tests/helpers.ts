@@ -76,6 +76,61 @@ export function advance(
   state: GameState,
   days: number,
 ): { state: GameState; entries: LogEntry[] } {
+  if (days > SYNC_DAY_LIMIT) {
+    throw new Error(
+      `advance() só vai até ${SYNC_DAY_LIMIT} dias; foram pedidos ${days}. ` +
+        'Use await advanceAsync(): acima disso o corpo do teste bloqueia o worker por mais de um minuto ' +
+        'e o RPC do reporter estoura, deixando `vitest run` vermelho com todos os testes verdes.',
+    )
+  }
+  return runDaysSync(state, days)
+}
+
+/**
+ * O limite de dias que `advance()` aceita rodar de uma vez.
+ *
+ * O número vem do birpc do vitest: o worker manda `onTaskUpdate` ao reporter e
+ * tem **60 segundos** para ler a resposta. Um dia de mundo listado custa até
+ * ~50ms, então cerca de 1.200 dias já estouram. 700 deixa margem de sobra.
+ */
+const SYNC_DAY_LIMIT = 700
+
+/**
+ * `advance()` para horizontes longos, cedendo o event loop de vez em quando.
+ *
+ * Não muda uma única asserção: a engine é pura e síncrona, o `await` só
+ * devolve a vez ao worker para ele responder ao reporter. Ceder por tempo, e
+ * não a cada N dias, porque o custo do dia varia em duas ordens de grandeza
+ * entre um jogador desempregado e um mundo com 28 listadas operando.
+ */
+export async function advanceAsync(
+  state: GameState,
+  days: number,
+  onDay?: (state: GameState) => void,
+): Promise<{ state: GameState; entries: LogEntry[] }> {
+  let current = state
+  const entries: LogEntry[] = []
+  let lastYield = Date.now()
+  for (let day = 0; day < days; day += 1) {
+    const result = runDaysSync(current, 1)
+    current = result.state
+    entries.push(...result.entries)
+    onDay?.(current)
+    if (Date.now() - lastYield > YIELD_EVERY_MS) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      lastYield = Date.now()
+    }
+  }
+  return { state: current, entries }
+}
+
+/** Um segundo de CPU entre respiros: 60x de margem contra o timeout do birpc. */
+const YIELD_EVERY_MS = 1000
+
+function runDaysSync(
+  state: GameState,
+  days: number,
+): { state: GameState; entries: LogEntry[] } {
   let current = state
   const entries: LogEntry[] = []
   for (let day = 0; day < days; day += 1) {

@@ -5,7 +5,7 @@ import { annualizedProfit } from '@/engine/companies'
 import { MARKET } from '@/data/config'
 import { findIndustry } from '@/data/industries'
 import type { CyclePhase, GameState } from '@/engine/types'
-import { advance, fresh, funded, liveDay, withMacro } from './helpers'
+import { advance, advanceAsync, fresh, funded, liveDay, withMacro } from './helpers'
 
 const FIRST = 'nimbo'
 
@@ -76,8 +76,8 @@ describe('precificação', () => {
     expect(fairValue(dear, dear.companies[FIRST]!)).toBeLessThan(fairValue(cheap, company))
   })
 
-  it('preço nunca fica negativo e o histórico é limitado', () => {
-    const state = advance(rich(), 800).state
+  it('preço nunca fica negativo e o histórico é limitado', async () => {
+    const state = (await advanceAsync(rich(), 800)).state
     for (const id of state.companyOrder) {
       const stock = state.companies[id]!.stock!
       expect(stock.price).toBeGreaterThanOrEqual(0)
@@ -88,9 +88,9 @@ describe('precificação', () => {
     }
   })
 
-  it('a carteira reage ao ciclo: recessão derruba o índice, expansão levanta', () => {
-    const boom = advance(lockCycle(rich(), 'expansao'), 730).state
-    const bust = advance(lockCycle(rich(), 'recessao'), 730).state
+  it('a carteira reage ao ciclo: recessão derruba o índice, expansão levanta', async () => {
+    const boom = (await advanceAsync(lockCycle(rich(), 'expansao'), 730)).state
+    const bust = (await advanceAsync(lockCycle(rich(), 'recessao'), 730)).state
     expect(bust.macro.marketIndex).toBeLessThan(boom.macro.marketIndex)
     expect(bust.macro.marketIndex).toBeLessThan(100)
   })

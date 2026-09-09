@@ -12,7 +12,7 @@ import { sectorMultiple } from '@/engine/market'
 import { findIndustry } from '@/data/industries'
 import { OPERATIONS } from '@/data/config'
 import type { GameState } from '@/engine/types'
-import { advance, fresh, funded } from './helpers'
+import { advance, advanceAsync, fresh, funded } from './helpers'
 
 function foundedState(capital = 200_000, industryId = 'varejo'): { state: GameState; id: string } {
   const start = funded(fresh(), 2_000_000)
@@ -229,8 +229,8 @@ describe('empresa do jogador', () => {
 })
 
 describe('mundo listado continua vivo', () => {
-  it('cinco anos sem quebradeira generalizada', () => {
-    const state = advance(funded(fresh(), 5_000_000), 1825).state
+  it('cinco anos sem quebradeira generalizada', async () => {
+    const state = (await advanceAsync(funded(fresh(), 5_000_000), 1825)).state
     const dead = state.companyOrder.filter((id) => state.companies[id]!.status !== 'ativa')
     expect(dead.length).toBeLessThan(6)
     expect(state.macro.marketIndex).toBeGreaterThan(50)

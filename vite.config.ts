@@ -54,6 +54,9 @@ export default defineConfig({
     // Os testes de sanidade simulam 10 anos de jogo com a bolsa rodando; o
     // default de 5s não cabe uma década.
     testTimeout: 300_000,
+    // Os `beforeAll` que simulam anos caem aqui, não no `testTimeout`: o
+    // default de 10s derruba o arquivo inteiro antes do primeiro `it`.
+    hookTimeout: 300_000,
     // Um teste de dez anos é um laço de CPU puro: enquanto ele roda, o worker
     // não processa a resposta do `onTaskUpdate` que já mandou ao reporter, e o
     // timer de 5s do birpc dispara antes da mensagem ser lida. Resultado: 241

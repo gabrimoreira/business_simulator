@@ -880,18 +880,33 @@ depois: saúde média **4,8**, humor **0,2**, e o curso nunca terminou. Três bl
 pesados não cabem no orçamento diário — o descanso não é opcional, é o que paga
 os outros dois. Carisma **ou** diploma; não os dois.
 
-**Defeito aberto no harness, não no jogo: `npx vitest run` sai com código 1.**
-Os 241 testes passam (13/13 arquivos), mas o processo termina vermelho por
-`[vitest-worker]: Timeout calling "onTaskUpdate"`. A causa é o formato dos
-testes: quatro deles bloqueiam o worker por mais de dois minutos num laço de CPU
-puro (`macro percorre as quatro fases` 178s, `Selic dentro dos limites` 146s,
-`mundo listado continua vivo` 139s, `quem apura melhor publica rumor` 133s).
-Enquanto o laço roda, o worker não lê a resposta do reporter, e o timer de 5s do
-birpc dispara primeiro. Baixar `maxWorkers` para 4 levou de 6 erros para 3;
-não elimina, porque esse timeout não é configurável. A correção real é fatiar
-esses quatro testes em janelas menores — o que muda o que eles afirmam, então
-não fiz na véspera do commit. **Não use `dangerouslyIgnoreUnhandledErrors`
-aqui**: mascararia erro de verdade junto.
+**O harness: `npx vitest run` saía com código 1 com tudo verde — corrigido.**
+Os 241 testes passavam, mas o processo terminava vermelho por
+`[vitest-worker]: Timeout calling "onTaskUpdate"`. A causa não era o jogo: o
+worker manda `onTaskUpdate` ao reporter e o birpc lhe dá **60 segundos** para
+ler a resposta. Quatro corpos de teste bloqueavam o worker por mais que isso
+num laço de CPU puro (`macro percorre as quatro fases` 178s, `Selic dentro dos
+limites` 146s, `mundo listado continua vivo` 139s, `quem apura melhor publica
+rumor` 133s), e a resposta ficava na fila até o laço acabar. Baixar
+`maxWorkers` para 4 levou de 6 erros para 3 — sintoma, não causa.
+
+A correção é `advanceAsync()` em `tests/helpers.ts`: mesma simulação, cedendo o
+event loop a cada segundo de CPU. **Nenhuma asserção mudou** — a engine é pura e
+síncrona, o `await` só devolve a vez ao worker. E para a regra não depender de
+disciplina, `advance()` agora **recusa** mais de 700 dias e diz o que usar no
+lugar: um dia de mundo listado custa até ~50ms, então ~1.200 dias já estouram os
+60s, e 700 deixa margem.
+
+Dois efeitos colaterais que a mudança expôs:
+
+| O que estava errado | Sintoma | Correção |
+|---|---|---|
+| `agents.spec` e `defense.spec` simulavam anos no escopo do `describe` | bloqueava a **coleta** do arquivo, que paga o mesmo timeout de RPC | move para `beforeAll` |
+| `hookTimeout` no default de 10s | com a simulação em `beforeAll`, o arquivo inteiro caía antes do primeiro `it` | 300s, junto do `testTimeout` |
+
+Resultado: 241 testes, 13 arquivos, **código 0**, sem erro não tratado.
+`dangerouslyIgnoreUnhandledErrors` teria escondido o sintoma junto com erro de
+verdade — não é o caminho.
 
 ### O que a Fase 3 mediu, e o que ficou em aberto
 

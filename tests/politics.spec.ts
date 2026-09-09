@@ -5,7 +5,7 @@ import { findPolicyDef, POLICY_DEFS } from '@/data/policies'
 import { POLITICS } from '@/data/config'
 import { findIndustry } from '@/data/industries'
 import type { GameState, Policy } from '@/engine/types'
-import { advance, fresh, funded } from './helpers'
+import { advance, advanceAsync, fresh, funded } from './helpers'
 
 /** Põe uma política em tramitação, com a votação no dia pedido. */
 function tabling(state: GameState, policyId: string, voteInDays = 60): GameState {
@@ -407,8 +407,8 @@ describe('carreira política', () => {
 })
 
 describe('congresso vivo', () => {
-  it('propõe, vota e elege ao longo de dez anos', () => {
-    const state = advance(funded(fresh(), 5_000_000_000), 3650).state
+  it('propõe, vota e elege ao longo de dez anos', async () => {
+    const state = (await advanceAsync(funded(fresh(), 5_000_000_000), 3650)).state
     expect(state.politics.policyOrder.length).toBeGreaterThan(2)
     expect(state.politics.elections.length).toBeGreaterThanOrEqual(2)
     // O catálogo não se esgota: projeto rejeitado volta.

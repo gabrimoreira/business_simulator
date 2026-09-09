@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { applyAction } from '@/engine/actions'
 import {
   buyback,
@@ -11,7 +11,7 @@ import {
 import { DEFENSE, TYCOONS } from '@/data/config'
 import { TYCOON_SEEDS } from '@/data/tycoons'
 import type { GameState } from '@/engine/types'
-import { advance, fresh, funded } from './helpers'
+import { advance, advanceAsync, fresh, funded } from './helpers'
 
 const TARGET = 'pulso'
 
@@ -185,7 +185,14 @@ describe('Herdeiro', () => {
 describe('tycoons rivais', () => {
   // Caixa alto no jogador só para o mundo continuar rodando: quem morre de
   // fome congela o tick e o teste passaria a medir um mundo parado.
-  const played = advance(funded(fresh(), 5_000_000_000), 900).state
+  //
+  // Roda em `beforeAll` e não no escopo do `describe` porque 900 dias levam
+  // minutos: no escopo do módulo isso bloqueia a **coleta**, e o vitest cobra
+  // o mesmo timeout de RPC que cobra de um teste.
+  let played: GameState
+  beforeAll(async () => {
+    played = (await advanceAsync(funded(fresh(), 5_000_000_000), 900)).state
+  })
 
   it('existem, têm patrimônio e acumulam posição de verdade', () => {
     expect(played.ai.tycoonOrder).toHaveLength(TYCOON_SEEDS.length)
