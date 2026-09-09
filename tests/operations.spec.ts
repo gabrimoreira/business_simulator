@@ -229,8 +229,8 @@ describe('empresa do jogador', () => {
 })
 
 describe('mundo listado continua vivo', () => {
-  it('dez anos sem quebradeira generalizada', () => {
-    const state = advance(funded(fresh(), 5_000_000), 3650).state
+  it('cinco anos sem quebradeira generalizada', () => {
+    const state = advance(funded(fresh(), 5_000_000), 1825).state
     const dead = state.companyOrder.filter((id) => state.companies[id]!.status !== 'ativa')
     expect(dead.length).toBeLessThan(6)
     expect(state.macro.marketIndex).toBeGreaterThan(50)

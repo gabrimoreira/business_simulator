@@ -7,7 +7,7 @@
  */
 
 /** Versão do formato de save. Incrementar exige uma migration (§3.5). */
-export const SAVE_VERSION = 7
+export const SAVE_VERSION = 8
 
 // --- Tempo (GAME_DESIGN §3.1) ----------------------------------------------
 
@@ -551,4 +551,49 @@ export const CONTROL = {
   /** Antitruste: participação setorial que aciona investigação. */
   antitrustShare: 0.45,
   antitrustDeadlineDays: 540,
+} as const
+
+// --- Defesas do conselho e tycoons (spec §5.12) ----------------------------
+
+export const DEFENSE = {
+  /** Participação de terceiro que acorda o conselho. */
+  wakeStake: 0.05,
+  /** Cooldown entre defesas da mesma empresa. */
+  cooldownDays: 90,
+  /** Recompra: fração do caixa que o conselho topa gastar. */
+  buybackCashRatio: 0.25,
+  /** Pílula de veneno: emissão como fração do capital existente. */
+  poisonPillIssue: 0.2,
+  /** Cavaleiro branco: fração do float que vai para o aliado. */
+  whiteKnightFloat: 0.35,
+  /** Lealdade do bloco do cavaleiro branco. */
+  whiteKnightLoyalty: 0.85,
+  /** Banco de defesa: custo como fração do caixa, e ganho de confiança. */
+  defenseBankCashRatio: 0.05,
+
+  /** Rancor marcado em quem ataca. */
+  grudgeOnDisclosure: 0.4,
+  grudgeOnTender: 1,
+} as const
+
+export const TYCOONS = {
+  /** Reavaliação do tycoon, em dias. */
+  reviewIntervalDays: 90,
+  /** Compra até esta fração do volume diário do papel. */
+  dailyVolumeShare: 0.5,
+  /**
+   * Participação a partir da qual ele parte para a OPA. Casada com o limiar de
+   * assento no conselho: com 0,20 os três rivais disputavam o mesmo float,
+   * empacavam em 17% e nenhuma oferta saía.
+   */
+  tenderFromStake: 0.15,
+  /** Prêmio que o tycoon oferece. */
+  tenderPremium: 0.45,
+  /**
+   * Só ataca empresa cujo preço esteja abaixo deste múltiplo do valor justo.
+   * Com 1,05 quase nunca havia alvo — os arquétipos que buscam margem empurram
+   * o preço acima do justo, e os rivais passavam a partida inteira parados em
+   * 8%. Um predador não precisa de pechincha, precisa de alvo tomável.
+   */
+  cheapThreshold: 1.25,
 } as const

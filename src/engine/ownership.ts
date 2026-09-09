@@ -61,6 +61,19 @@ export function referencePrice(company: Company): number {
   return recent.reduce((sum, candle) => sum + candle.close, 0) / recent.length
 }
 
+/**
+ * Regra dura do Herdeiro (spec §5.12): **recusa qualquer OPA, com qualquer
+ * prêmio**, enquanto a família mantiver o controle. Não é probabilidade — é
+ * recusa, e é o que torna a empresa dele intocável até uma crise de sucessão.
+ */
+export function familyRefuses(state: GameState, company: Company, holderId: string): boolean {
+  if (!holderId.startsWith('familia@')) return false
+  const agent = state.ai.agents[company.id]
+  if (agent?.profileId !== 'herdeiro') return false
+  // Se a família já perdeu o bloco, a regra deixa de valer.
+  return stakeOf(company, holderId) >= 0.1
+}
+
 /** Lealdade declarada do bloco; blocos desconhecidos resistem pouco. */
 function loyaltyOf(holderId: string): number {
   const prefix = holderId.split('@')[0]
@@ -141,11 +154,17 @@ export function resolveTender(draft: GameState, tender: Tender, log: LogEntry[])
     const accepts =
       entry.holderId === 'float'
         ? tender.premium > 0
-        : chance(draft.rng, acceptanceChance(draft, company, entry.holderId, tender.premium))
+        : familyRefuses(draft, company, entry.holderId)
+          ? false
+          : chance(draft.rng, acceptanceChance(draft, company, entry.holderId, tender.premium))
     if (!accepts) continue
 
     const price = wanted * tender.pricePerShare
-    if (tender.bidderId === 'player' && draft.player.money < cost + price) break
+    const purse =
+      tender.bidderId === 'player'
+        ? draft.player.money
+        : (draft.ai.tycoons[tender.bidderId]?.cash ?? 0)
+    if (purse < cost + price) break
 
     transfer(company, entry.holderId, tender.bidderId, wanted)
     acquired += wanted
@@ -159,6 +178,12 @@ export function resolveTender(draft: GameState, tender: Tender, log: LogEntry[])
     draft.player.money -= cost
     // Notoriedade: tomar empresa à força chama atenção da imprensa e do fisco.
     draft.player.notoriety = Math.min(100, draft.player.notoriety + (tender.hostile ? 8 : 3))
+  } else {
+    const tycoon = draft.ai.tycoons[tender.bidderId]
+    if (tycoon) {
+      tycoon.cash -= cost
+      tycoon.notoriety = Math.min(100, tycoon.notoriety + (tender.hostile ? 8 : 3))
+    }
   }
 
   const stake = stakeOf(company, tender.bidderId)
@@ -183,10 +208,56 @@ export function resolveTender(draft: GameState, tender: Tender, log: LogEntry[])
  * daí a listada é dirigida pelo mesmo painel da empresa própria.
  */
 export function applyControl(draft: GameState, company: Company, log: LogEntry[]): void {
+  // Um tycoon que passa de 50% tira a empresa de você. É o antagonista do
+  // §5.12 fazendo o que o jogador faz — mesma regra, mesmo limiar.
+  for (const tycoonId of draft.ai.tycoonOrder) {
+    const tycoon = draft.ai.tycoons[tycoonId]
+    if (!tycoon) continue
+    if (stakeOf(company, tycoonId) <= CONTROL.controlStake) continue
+
+    const wasPlayers = company.managedBy === 'player'
+    if (!tycoon.controlledCompanyIds.includes(company.id)) {
+      tycoon.controlledCompanyIds.push(company.id)
+    }
+    if (company.managedBy !== 'ai') {
+      company.managedBy = 'ai'
+      draft.ai.agents[company.id] = {
+        companyId: company.id,
+        profileId: tycoon.profileId,
+        stress: 0,
+        breakUntilDayIndex: null,
+        warFatigue: 0,
+        grudge: {},
+        lastReviewDayIndex: -1,
+        reviewOffset: draft.date.dayIndex % 90,
+        cooldowns: {},
+        badQuarters: 0,
+        imitationTargetId: null,
+        appointedByPlayer: false,
+      }
+      if (!draft.ai.agentOrder.includes(company.id)) draft.ai.agentOrder.push(company.id)
+      log.push({
+        id: `lost-${company.id}-${draft.date.dayIndex}`,
+        dayIndex: draft.date.dayIndex,
+        severity: wasPlayers ? 'critico' : 'ruim',
+        source: 'ownership',
+        text: wasPlayers
+          ? `${tycoon.name} tomou o controle de ${company.name}. A empresa não é mais sua.`
+          : `${tycoon.name} assumiu o controle de ${company.name}.`,
+        amount: null,
+      })
+    }
+    return
+  }
+
   const stake = stakeOf(company, 'player')
   const level = controlLevelFor(stake)
 
   if (level === 'controle' || level === 'fechamento') {
+    // CEO nomeado pelo jogador continua no comando: a delegação é uma escolha,
+    // não um acidente de contagem de ações.
+    if (draft.ai.agents[company.id]?.appointedByPlayer) return
+
     if (company.managedBy !== 'player') {
       company.managedBy = 'player'
       delete draft.ai.agents[company.id]
@@ -219,6 +290,97 @@ function stepReached(stake: number): number | null {
     if (stake >= step) reached = step
   }
   return reached
+}
+
+// ---------------------------------------------------------------------------
+// Defesas do conselho (spec §5.12)
+// ---------------------------------------------------------------------------
+
+/** Move ações do float para um detentor, pelo preço dado. Devolve o custo. */
+export function buyFromFloat(company: Company, holderId: HolderId, shares: number, price: number): number {
+  const float = company.ownership.find((entry) => entry.holderId === 'float')
+  if (!float || float.shares <= 0 || shares <= 0) return 0
+  const taken = Math.min(float.shares, Math.floor(shares))
+  if (taken <= 0) return 0
+  transfer(company, 'float', holderId, taken)
+  return taken * price
+}
+
+/** Devolve ações ao float, pelo preço dado. Devolve o valor apurado. */
+export function sellToFloat(company: Company, holderId: HolderId, shares: number, price: number): number {
+  const holder = company.ownership.find((entry) => entry.holderId === holderId)
+  if (!holder || holder.shares <= 0 || shares <= 0) return 0
+  const sold = Math.min(holder.shares, Math.floor(shares))
+  if (sold <= 0) return 0
+  transfer(company, String(holderId), 'float', sold)
+  return sold * price
+}
+
+/**
+ * Recompra de ações: a empresa gasta caixa comprando o próprio papel no
+ * mercado e o **retira de circulação**. Menos ações para o mesmo lucro eleva o
+ * valor justo por ação, e o preço sobe atrás — que é o efeito real de encarecer
+ * o alvo para quem está acumulando.
+ */
+export function buyback(draft: GameState, company: Company, budget: number): number {
+  const stock = company.stock
+  const float = company.ownership.find((entry) => entry.holderId === 'float')
+  if (!stock || !float || float.shares <= 0 || budget <= 0) return 0
+
+  const shares = Math.min(float.shares, Math.floor(budget / stock.price))
+  if (shares <= 0) return 0
+
+  const cost = shares * stock.price
+  company.cash -= cost
+  float.shares -= shares
+  stock.sharesOutstanding -= shares
+  void draft
+  return shares
+}
+
+/**
+ * Pílula de veneno: emissão diluidora para todo mundo **menos** o atacante.
+ *
+ * O preço cai na exata proporção da emissão, para o valor de mercado da empresa
+ * não mudar — a pílula não cria nem destrói riqueza, ela **transfere** valor do
+ * atacante para os demais acionistas. Sem esse ajuste, diluir inventaria
+ * dinheiro do nada e o índice da bolsa mentiria.
+ */
+export function poisonPill(company: Company, raiderId: HolderId, issueRatio: number): number {
+  const stock = company.stock
+  if (!stock || issueRatio <= 0) return 0
+
+  const before = totalShares(company)
+  const issued = Math.floor(before * issueRatio)
+  if (issued <= 0) return 0
+
+  const eligible = company.ownership.filter(
+    (entry) => entry.holderId !== raiderId && entry.shares > 0,
+  )
+  const eligibleShares = eligible.reduce((sum, entry) => sum + entry.shares, 0)
+  if (eligibleShares <= 0) return 0
+
+  for (const entry of eligible) {
+    entry.shares += Math.floor((issued * entry.shares) / eligibleShares)
+  }
+
+  const after = totalShares(company)
+  stock.sharesOutstanding = after
+  stock.price *= before / after
+  return after - before
+}
+
+/**
+ * Cavaleiro branco: um aliado compra parte do float e passa a segurar o papel.
+ * Não custa caixa à empresa — custa liquidez a quem queria comprar.
+ */
+export function whiteKnight(company: Company, allyId: string, floatRatio: number): number {
+  const float = company.ownership.find((entry) => entry.holderId === 'float')
+  if (!float || float.shares <= 0) return 0
+  const shares = Math.floor(float.shares * floatRatio)
+  if (shares <= 0) return 0
+  transfer(company, 'float', allyId, shares)
+  return shares
 }
 
 /** Divulgação obrigatória a partir de 5% (§5.6): vira notícia. */

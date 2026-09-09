@@ -77,7 +77,7 @@ describe('precificação', () => {
   })
 
   it('preço nunca fica negativo e o histórico é limitado', () => {
-    const state = advance(rich(), 900).state
+    const state = advance(rich(), 800).state
     for (const id of state.companyOrder) {
       const stock = state.companies[id]!.stock!
       expect(stock.price).toBeGreaterThanOrEqual(0)

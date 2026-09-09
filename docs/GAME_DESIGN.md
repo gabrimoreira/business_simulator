@@ -750,6 +750,35 @@ e ao final dá 72% e o controle. A OPA pelo resto, com prêmio de 60%, só arran
 minoritários organizados aceitam. É o desenho pretendido — o bloco leal é o que
 faz o Herdeiro do §5.12 ser intocável sem uma crise de sucessão.
 
+### Ajustes da Fase 6b
+
+| O que estava errado | Sintoma | Correção |
+|---|---|---|
+| `return null` onde devia ser `continue` em `pickTarget` | um papel sem valor justo abortava a busca inteira e os rivais ficavam parados | `continue` |
+| Rival comprava só na reavaliação trimestral, com teto de volume **diário** | formar 20% levaria 25 anos | acumulação diária; a reavaliação decide o alvo e a hora de atacar |
+| Rival elegia o alvo mais barato, esgotava o float e insistia nele | comprava zero todo dia para sempre | `pickTarget` pula quem não tem float |
+| Dividendo só era creditado ao jogador | o rival torrava a fortuna comprando e nunca mais tinha caixa | tycoons recebem dividendo do que possuem |
+| Rival pulverizava o caixa em oito nomes | nunca chegava a base para atacar | a posição já formada puxa o alvo (persistência) |
+| Alvo reescolhido todo dia | varredura de todas as listadas por rival por tick; os testes de dez anos estouraram 180s | alvo guardado, reescolhido a cada 30 dias |
+| `ownershipDisclosures` crescia sem fim | varredura de ameaça O(n) por empresa por dia | janela de 200 divulgações |
+
+**A armadilha que me pegou pela quinta vez.** Passei um bom tempo caçando um bug
+inexistente nos tycoons: eles pareciam congelados em 8% por 2.600 dias. A causa
+era o **probe**, não o motor — com R$ 1.000 no bolso o jogador morre de fome, o
+`worldTick` para de avançar, e o helper `advance()` devolvia, calado, um estado
+parado no dia da morte. O mesmo engano já tinha custado tempo nas Fases 1, 2 e 4.
+
+Agora `advance()` **lança exceção** quando a partida encerra no meio. Na primeira
+execução ele derrubou dois testes que diziam simular 200 e 300 dias e mediam 56 e
+57 — e que passavam havia três fases.
+
+**Consequência de gameplay que os testes flagraram:** com as defesas ativas,
+comprar todo o float **não basta** mais para tomar o controle. O conselho tira
+papel do mercado (cavaleiro branco), dilui (pílula) ou encarece (recompra), e
+fechar o controle passa a exigir a oferta pública. É o comportamento pretendido —
+e o teste que antes afirmava "comprar o float dá o controle" agora afirma o
+contrário, junto com o caminho que funciona.
+
 ### O que a Fase 3 mediu, e o que ficou em aberto
 
 Aos 65 anos, em três seeds:

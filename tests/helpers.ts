@@ -63,7 +63,15 @@ export function liveDay(
   return { state: result.state, entries: result.log[0]?.entries ?? [] }
 }
 
-/** Vários dias de vida, acumulando o log. */
+/**
+ * Vários dias de vida, acumulando o log.
+ *
+ * **Grita se a partida encerrar no meio.** `worldTick` para de avançar quando
+ * `meta.ending` é marcado, então um jogador que morre de fome congela o mundo — e
+ * o helper devolveria, em silêncio, um estado parado no dia da morte. Já custou
+ * horas de diagnóstico em quatro fases: testes mediam "dez anos" que na verdade
+ * eram sessenta dias.
+ */
 export function advance(
   state: GameState,
   days: number,
@@ -71,9 +79,16 @@ export function advance(
   let current = state
   const entries: LogEntry[] = []
   for (let day = 0; day < days; day += 1) {
+    const before = current.date.dayIndex
     const result = liveDay(current)
     current = result.state
     entries.push(...result.entries)
+    if (current.date.dayIndex === before) {
+      throw new Error(
+        `advance() parou no dia ${before} de ${days}: a partida encerrou (${current.meta.ending ?? 'motivo desconhecido'}). ` +
+          'Financie o jogador com funded() antes de simular.',
+      )
+    }
   }
   return { state: current, entries }
 }

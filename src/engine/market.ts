@@ -381,12 +381,26 @@ function payDividends(draft: GameState, log: LogEntry[]): void {
     if (paid <= 0) continue
 
     company.cash -= paid
+    const perShareActual = paid / stock.sharesOutstanding
+
     const position = draft.market.positions[id]
     if (position && position.shares > 0) {
-      const received = (paid / stock.sharesOutstanding) * position.shares
+      const received = perShareActual * position.shares
       draft.player.money += received
       draft.market.dividendsReceivedTotal += received
       total += received
+    }
+
+    // Os rivais também vivem do que possuem. Sem isto o tycoon torrava a
+    // fortuna comprando e depois passava a partida inteira sem caixa — e um
+    // antagonista sem dinheiro não ataca ninguém.
+    for (const tycoonId of draft.ai.tycoonOrder) {
+      const tycoon = draft.ai.tycoons[tycoonId]
+      if (!tycoon) continue
+      const held = company.ownership
+        .filter((entry) => entry.holderId === tycoonId)
+        .reduce((sum, entry) => sum + entry.shares, 0)
+      if (held > 0) tycoon.cash += perShareActual * held
     }
   }
 
@@ -449,6 +463,12 @@ function accrueTaxDebts(draft: GameState): void {
 
 /** Vencimento das OPAs e antitruste (spec §5.6). */
 function stepCorporate(draft: GameState, log: LogEntry[]): void {
+  // Divulgação velha não é ameaça: sem janela, a lista cresce para sempre e a
+  // varredura de ameaça do conselho vira O(n) por empresa por dia.
+  if (draft.ownershipDisclosures.length > 200) {
+    draft.ownershipDisclosures.splice(0, draft.ownershipDisclosures.length - 200)
+  }
+
   for (const tender of draft.tenders) {
     if (tender.status !== 'aberta') continue
     if (draft.date.dayIndex < tender.expiresDayIndex) continue

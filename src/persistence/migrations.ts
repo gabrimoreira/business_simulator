@@ -10,6 +10,7 @@ import { SAVE_VERSION } from '@/data/config'
 import { buildOwnership, seedWorld } from '@/engine/newGame'
 import { INDUSTRIES } from '@/data/industries'
 import { AI_PROFILES, ARCHETYPE_BY_COMPANY } from '@/data/aiProfiles'
+import { TYCOON_SEEDS } from '@/data/tycoons'
 import { hashId } from '@/engine/rng'
 import type { GameState } from '@/engine/types'
 
@@ -178,6 +179,54 @@ export const MIGRATIONS: Record<number, Migration> = {
       company.ownership = buildOwnership(id, total, float?.shares ?? 0)
     }
     save.saveVersion = 7
+    return save
+  },
+
+  /**
+   * 7 → 8: a Fase 6b trouxe os tycoons rivais e a nomeação de CEO. Saves
+   * anteriores não têm rival nenhum — e sem antagonista o fim de jogo vira um
+   * vazio onde só se acumula dinheiro.
+   */
+  7: (save) => {
+    const ai = (save.ai ?? {}) as RawSave
+
+    const agents = (ai.agents ?? {}) as Record<string, RawSave>
+    for (const agent of Object.values(agents)) {
+      if (typeof agent.appointedByPlayer !== 'boolean') agent.appointedByPlayer = false
+    }
+    ai.agents = agents
+
+    const tycoons = (ai.tycoons ?? {}) as Record<string, unknown>
+    const tycoonOrder: string[] = []
+    for (const seed of TYCOON_SEEDS) {
+      if (!tycoons[seed.id]) {
+        tycoons[seed.id] = {
+          id: seed.id,
+          name: seed.name,
+          profileId: seed.profileId,
+          cash: seed.wealth,
+          positions: {},
+          positionOrder: [],
+          controlledCompanyIds: [],
+          politicalInfluence: 0,
+          ambition: seed.ambition,
+          homeIndustryId: seed.homeIndustryId,
+          wealthFloor: seed.wealth * 0.2,
+          targetCompanyId: null,
+          lastTargetDayIndex: -1,
+          grudge: {},
+          lastReviewDayIndex: -1,
+          notoriety: 0,
+        }
+      }
+      tycoonOrder.push(seed.id)
+    }
+    ai.tycoons = tycoons
+    ai.tycoonOrder = tycoonOrder
+    if (!Array.isArray(ai.defenses)) ai.defenses = []
+    save.ai = ai
+
+    save.saveVersion = 8
     return save
   },
 }

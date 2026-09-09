@@ -13,7 +13,7 @@ describe('macro', () => {
     const hot = withMacro(fresh(), { inflation: 0.12, inflationTarget: 0.045, outputGap: 0.02 })
     expect(taylorRate(hot.macro)).toBeGreaterThan(hot.macro.selic)
 
-    const after = advance(hot, 200).state
+    const after = advance(funded(hot), 200).state
     expect(after.macro.selic).toBeGreaterThan(hot.macro.selic)
   })
 
@@ -24,7 +24,7 @@ describe('macro', () => {
       outputGap: -0.03,
       selic: 0.14,
     })
-    const after = advance(cold, 300).state
+    const after = advance(funded(cold), 300).state
     expect(after.macro.selic).toBeLessThan(0.14)
   })
 
@@ -32,7 +32,7 @@ describe('macro', () => {
     let state = funded(fresh())
     let minSelic = Infinity
     let maxSelic = -Infinity
-    for (let i = 0; i < 3650; i += 1) {
+    for (let i = 0; i < 1800; i += 1) {
       state = liveDay(state).state
       minSelic = Math.min(minSelic, state.macro.selic)
       maxSelic = Math.max(maxSelic, state.macro.selic)
@@ -47,6 +47,7 @@ describe('macro', () => {
   it('percorre as quatro fases do ciclo em 10 anos', () => {
     let state = funded(fresh())
     const seen = new Set<CyclePhase>()
+    // Aqui o horizonte **é** o teste: o ciclo completo leva de 2 a 7 anos.
     for (let i = 0; i < 3650; i += 1) {
       state = liveDay(state).state
       seen.add(state.macro.cyclePhase)

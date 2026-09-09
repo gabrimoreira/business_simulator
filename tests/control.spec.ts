@@ -62,12 +62,43 @@ describe('acumulação de posição', () => {
   const start = funded(fresh(), 1_500_000_000)
   const accumulated = accumulate(advance(start, 120).state, TARGET, 260)
 
-  it('comprar o float dá o controle e troca quem dirige a empresa', () => {
-    const company = accumulated.companies[TARGET]!
+  /**
+   * A partir da Fase 6b, comprar o float **não basta**: o conselho reage e tira
+   * papel do mercado. Fechar o controle exige a oferta pública — que é
+   * exatamente o caminho que o §5.6 desenha.
+   */
+  const controlled = (() => {
+    let current = accumulated
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const company = current.companies[TARGET]!
+      if (stakeOf(company, 'player') > CONTROL.controlStake) break
+      const outside = company.ownership
+        .filter((entry) => entry.holderId !== 'player')
+        .reduce((sum, entry) => sum + entry.shares, 0)
+      current = applyAction(current, {
+        kind: 'lancarOpa',
+        companyId: TARGET,
+        premium: 0.9,
+        sharesSought: outside,
+      }).state
+      current = advance(current, CONTROL.tenderDays + 3).state
+    }
+    return current
+  })()
+
+  it('a defesa do conselho impede tomar o controle só comprando float', () => {
+    expect(stakeOf(accumulated.companies[TARGET]!, 'player')).toBeGreaterThan(
+      CONTROL.relevantStake,
+    )
+    expect(accumulated.ai.defenses.some((defense) => defense.againstId === 'player')).toBe(true)
+  })
+
+  it('a oferta pública fecha o controle e troca quem dirige a empresa', () => {
+    const company = controlled.companies[TARGET]!
     expect(stakeOf(company, 'player')).toBeGreaterThan(CONTROL.controlStake)
     expect(company.managedBy).toBe('player')
     // Sem agente: quem manda agora é o jogador.
-    expect(accumulated.ai.agents[TARGET]).toBeUndefined()
+    expect(controlled.ai.agents[TARGET]).toBeUndefined()
   })
 
   it('cruzar 5% gera divulgação e manchete, sem inundar o feed', () => {
@@ -83,7 +114,7 @@ describe('acumulação de posição', () => {
   })
 
   it('a empresa controlada aparece no painel de gestão e aceita diretriz', () => {
-    const changed = applyAction(accumulated, {
+    const changed = applyAction(controlled, {
       kind: 'ajustarPreco',
       companyId: TARGET,
       price: 1.1,

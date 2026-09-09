@@ -9,6 +9,7 @@ import { annualizedProfit, capacityOf, valuationOf } from '@/engine/companies'
 import { sectorMultiple } from '@/engine/market'
 import { INDUSTRIES, findIndustry } from '@/data/industries'
 import { CONTROL, OPERATIONS } from '@/data/config'
+import type { ArchetypeId } from '@/engine/types'
 
 const game = useGameStore()
 
@@ -17,7 +18,12 @@ const owned = computed(() => {
   if (!state) return []
   return state.companyOrder
     .map((id) => state.companies[id])
-    .filter((company) => company?.managedBy === 'player')
+    // Inclui as delegadas: continuam suas, só não consomem bloco.
+    .filter(
+      (company) =>
+        company?.managedBy === 'player' ||
+        (company && state.ai.agents[company.id]?.appointedByPlayer),
+    )
     .map((company) => {
       const industry = findIndustry(company!.industryId)!
       const multiple = sectorMultiple(industry.multipleBase, state.macro.selic)
@@ -31,6 +37,9 @@ const owned = computed(() => {
         capacity: capacityOf(company!, industry),
         // Qual dos dois está segurando a produção: gente ou máquina.
         bottleneck: capital < labor ? 'capital' : 'pessoas',
+        ceo: state.ai.agents[company!.id]?.appointedByPlayer
+          ? (state.ai.profiles[state.ai.agents[company!.id]!.profileId]?.name ?? null)
+          : null,
         // Elegibilidade a IPO: quatro trimestres divulgados e os pisos do §5.6.
         canIpo:
           company!.quartersReported >= CONTROL.ipoMinQuarters &&
@@ -43,6 +52,16 @@ const owned = computed(() => {
 })
 
 const showRivals = ref(false)
+const delegating = ref<string | null>(null)
+
+const profiles = computed(() => Object.values(game.state?.ai.profiles ?? {}))
+
+/** Delegação da resolução C2: o late game é nomear personalidades, não clicar. */
+function appoint(companyId: string, profileId: ArchetypeId): void {
+  game.dispatch({ kind: 'nomearCeo', companyId, profileId })
+  delegating.value = null
+  navigator.vibrate?.(20)
+}
 
 // --- fundação --------------------------------------------------------------
 const founding = ref(false)
@@ -121,6 +140,7 @@ function hire(companyId: string, count: number): void {
               {{ item.industry.name }} ·
               {{ item.company.isPublic ? 'listada' : 'fechada' }} ·
               {{ item.company.status === 'ativa' ? 'operando' : item.company.status }}
+              <template v-if="item.ceo">· CEO {{ item.ceo }}</template>
             </p>
           </div>
           <div class="shrink-0 text-right">
@@ -246,6 +266,29 @@ function hire(companyId: string, count: number): void {
           >
             Abrir capital
           </button>
+          <button
+            class="col-span-2 min-h-[44px] rounded-xl border border-line text-sm text-muted"
+            @click="delegating = delegating === item.company.id ? null : item.company.id"
+          >
+            {{ delegating === item.company.id ? 'cancelar' : 'Nomear um CEO' }}
+          </button>
+        </div>
+
+        <div v-if="delegating === item.company.id" class="mt-2 rounded-xl border border-line p-3">
+          <p class="pb-2 text-[11px] text-muted">
+            Você escolhe a personalidade e vive com o que ela faz — a empresa sai da sua lista
+            de blocos diários.
+          </p>
+          <div class="grid grid-cols-3 gap-1.5">
+            <button
+              v-for="profile in profiles"
+              :key="profile.id"
+              class="min-h-[40px] rounded-lg border border-line px-1 text-[11px]"
+              @click="appoint(item.company.id, profile.id)"
+            >
+              {{ profile.name }}
+            </button>
+          </div>
         </div>
       </div>
     </section>

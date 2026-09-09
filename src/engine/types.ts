@@ -889,6 +889,12 @@ export interface AgentState {
   badQuarters: number
   /** Líder do setor que o Espelho está copiando. */
   imitationTargetId: EntityId | null
+  /**
+   * CEO nomeado pelo jogador. Marca que a empresa é dele mas é dirigida por um
+   * arquétipo por escolha — sem isso a reavaliação de controle devolveria a
+   * gestão ao jogador no dia seguinte e a delegação não existiria.
+   */
+  appointedByPlayer: boolean
 }
 
 /** Tycoon rival: joga o mesmo jogo que o jogador (§5.12). */
@@ -903,6 +909,16 @@ export interface TycoonState {
   politicalInfluence: number
   ambition: number
   homeIndustryId: string
+  /** Caixa abaixo do qual o rival gira a carteira para financiar o alvo. */
+  wealthFloor: Money
+  /**
+   * Alvo corrente. Guardado porque reescolher todo dia custa uma varredura de
+   * todas as listadas por rival — e o alvo de um predador não muda de manhã
+   * para tarde.
+   */
+  targetCompanyId: EntityId | null
+  /** Dia da última escolha de alvo. */
+  lastTargetDayIndex: number
   grudge: Record<string, number>
   lastReviewDayIndex: number
   notoriety: number

@@ -861,6 +861,66 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         return
       }
 
+      case 'nomearCeo': {
+        const company = draft.companies[action.companyId]
+        if (!company) {
+          log.push(entry('ruim', 'Empresa desconhecida.'))
+          return
+        }
+        if (stakeOf(company, 'player') <= CONTROL.controlStake) {
+          log.push(entry('ruim', 'Você precisa controlar a empresa para nomear o CEO.'))
+          return
+        }
+        const profile = draft.ai.profiles[action.profileId]
+        if (!profile) {
+          log.push(entry('ruim', 'Arquétipo desconhecido.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        player.blocksUsedToday += 1
+
+        // Delegar é escolher uma personalidade e viver com o que ela faz
+        // (resolução C2): a empresa sai da sua lista de blocos diários.
+        company.managedBy = 'ai'
+        const existing = draft.ai.agents[company.id]
+        draft.ai.agents[company.id] = {
+          companyId: company.id,
+          profileId: action.profileId,
+          stress: 0,
+          breakUntilDayIndex: null,
+          warFatigue: 0,
+          grudge: existing?.grudge ?? {},
+          lastReviewDayIndex: -1,
+          reviewOffset: draft.date.dayIndex % 90,
+          cooldowns: {},
+          badQuarters: 0,
+          imitationTargetId: null,
+          appointedByPlayer: true,
+        }
+        if (!draft.ai.agentOrder.includes(company.id)) draft.ai.agentOrder.push(company.id)
+
+        // As obrigações do arquétipo entram na diretriz já: o novo CEO chega
+        // mandando.
+        for (const rule of profile.hardRules) {
+          if (rule.kind === 'floor' && rule.field === 'rndRatio') company.directives.rndRatio = rule.value
+          if (rule.kind === 'floor' && rule.field === 'marketingRatio') {
+            company.directives.marketingRatio = rule.value
+          }
+          if (rule.kind === 'ceiling' && rule.field === 'rndRatio') company.directives.rndRatio = rule.value
+          if (rule.kind === 'ceiling' && rule.field === 'marketingRatio') {
+            company.directives.marketingRatio = rule.value
+          }
+        }
+        company.directives.cashReserveTarget = profile.cashReserveTarget
+        company.directives.minMargin = profile.minMargin
+
+        log.push(entry('info', `${profile.name} assume o comando de ${company.name}.`))
+        return
+      }
+
       case 'assinarVeiculo': {
         const outlet = findOutlet(action.outletId)
         if (!outlet) {

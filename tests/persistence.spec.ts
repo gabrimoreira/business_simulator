@@ -39,17 +39,12 @@ describe('serialização', () => {
 describe('migrations', () => {
   /** Desfaz na mão o que a migration N-1 → N deve refazer. */
   function migrated0(save: Record<string, unknown>): Record<string, unknown> {
-    const companies = save.companies as Record<string, Record<string, unknown>>
-    for (const [id, company] of Object.entries(companies)) {
-      const ownership = company.ownership as Array<{ holderId: string; shares: number }>
-      const float = ownership.find((entry) => entry.holderId === 'float')
-      const total = ownership.reduce((sum, entry) => sum + entry.shares, 0)
-      // Volta ao bloco único da versão 6.
-      company.ownership = [
-        { holderId: 'float', shares: float?.shares ?? 0 },
-        { holderId: `bloco-${id}`, shares: total - (float?.shares ?? 0) },
-      ]
-    }
+    const ai = save.ai as Record<string, unknown>
+    // Volta à versão 7: sem rivais e sem a marca de CEO nomeado.
+    ai.tycoons = {}
+    ai.tycoonOrder = []
+    const agents = ai.agents as Record<string, Record<string, unknown>>
+    for (const agent of Object.values(agents)) delete agent.appointedByPlayer
     return save
   }
 
@@ -59,20 +54,19 @@ describe('migrations', () => {
     // A migration mais nova (4 → 5) trocou a lista de funcionários pelo quadro
     // agregado e deu capital instalado a cada empresa. Um save da versão N-1 é
     // um save com `employees` e sem `workforce`.
-    // A migration mais nova (6 → 7) quebra o bloco de controle único em
-    // acionistas identificáveis. Um save da versão N-1 tem `bloco-<id>`.
+    // A migration mais nova (7 → 8) traz os tycoons rivais e a marca de CEO
+    // nomeado. Um save da versão N-1 não tem rival nenhum.
     migrated0(legacy)
 
     const migrated = migrate(legacy)
-    const company = migrated.companies[migrated.companyOrder[0]!]!
 
     expect(migrated.saveVersion).toBe(SAVE_VERSION)
-    const holders = company.ownership.map((entry) => entry.holderId)
-    expect(holders.some((holder) => holder.startsWith('bloco-'))).toBe(false)
-    expect(holders.filter((holder) => holder !== 'float').length).toBeGreaterThanOrEqual(3)
-    expect(company.ownership.reduce((sum, entry) => sum + entry.shares, 0)).toBe(
-      company.stock!.sharesOutstanding,
-    )
+    expect(migrated.ai.tycoonOrder.length).toBeGreaterThan(0)
+    const tycoon = migrated.ai.tycoons[migrated.ai.tycoonOrder[0]!]!
+    expect(tycoon.cash).toBeGreaterThan(0)
+    expect(tycoon.targetCompanyId).toBeNull()
+    const agent = migrated.ai.agents[migrated.ai.agentOrder[0]!]!
+    expect(agent.appointedByPlayer).toBe(false)
   })
 
   it('percorre a cadeia inteira a partir da versão 0', () => {

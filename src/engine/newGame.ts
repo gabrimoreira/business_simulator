@@ -20,6 +20,7 @@ import { INDUSTRIES } from '../data/industries'
 import { COMPANY_SEEDS, OWNER_BLOCKS } from '../data/companies.seed'
 import { NEWS_OUTLETS } from '../data/newsOutlets'
 import { AI_PROFILES, ARCHETYPE_BY_COMPANY } from '../data/aiProfiles'
+import { TYCOON_SEEDS } from '../data/tycoons'
 import { hashId } from './rng'
 import { AI } from '../data/config'
 import { COMPANY_OPS, OPERATIONS } from '../data/config'
@@ -306,6 +307,7 @@ export function seedWorld(state: GameState): void {
       cooldowns: {},
       badQuarters: 0,
       imitationTargetId: null,
+      appointedByPlayer: false,
     }
     agentOrder.push(id)
 
@@ -331,6 +333,33 @@ export function seedWorld(state: GameState): void {
   state.ai.profiles = { ...AI_PROFILES }
   state.ai.agents = agents
   state.ai.agentOrder = agentOrder
+
+  // Tycoons rivais: jogam o mesmo jogo, com o mesmo vocabulário de ações.
+  const tycoons: GameState['ai']['tycoons'] = {}
+  const tycoonOrder: string[] = []
+  for (const seed of TYCOON_SEEDS) {
+    tycoons[seed.id] = {
+      id: seed.id,
+      name: seed.name,
+      profileId: seed.profileId,
+      cash: seed.wealth,
+      positions: {},
+      positionOrder: [],
+      controlledCompanyIds: [],
+      politicalInfluence: 0,
+      ambition: seed.ambition,
+      homeIndustryId: seed.homeIndustryId,
+      wealthFloor: seed.wealth * 0.2,
+      targetCompanyId: null,
+      lastTargetDayIndex: -1,
+      grudge: {},
+      lastReviewDayIndex: -1,
+      notoriety: 0,
+    }
+    tycoonOrder.push(seed.id)
+  }
+  state.ai.tycoons = tycoons
+  state.ai.tycoonOrder = tycoonOrder
 
   state.industries = industries
   state.industryOrder = industryOrder
