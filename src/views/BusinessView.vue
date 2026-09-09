@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import CompetitionPanel from '@/components/CompetitionPanel.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ScreenTitle from '@/components/ScreenTitle.vue'
 import { useGameStore } from '@/stores/game'
@@ -35,6 +36,8 @@ const owned = computed(() => {
       }
     })
 })
+
+const showRivals = ref(false)
 
 // --- fundação --------------------------------------------------------------
 const founding = ref(false)
@@ -275,12 +278,16 @@ function hire(companyId: string, count: number): void {
     </section>
 
     <section class="px-4 pt-4">
-      <h2 class="pb-2 text-sm font-medium text-muted">Concorrência</h2>
-      <EmptyState
-        title="Nenhum concorrente mapeado"
-        description="Participação por setor, preço médio praticado e as últimas jogadas conhecidas de cada rival, com o rótulo de quão desatualizada está a informação."
-        phase="Fase 5b"
-      />
+      <div class="flex items-baseline justify-between pb-2">
+        <h2 class="text-sm font-medium text-muted">Concorrência</h2>
+        <button class="text-[11px] text-accent" @click="showRivals = !showRivals">
+          {{ showRivals ? 'ocultar' : 'ver setores' }}
+        </button>
+      </div>
+      <CompetitionPanel v-if="showRivals" />
+      <p v-else class="px-1 text-[11px] text-muted">
+        Balanço divulgado tem até um trimestre de atraso. Preço é público hoje.
+      </p>
     </section>
   </div>
 </template>

@@ -9,6 +9,8 @@
 import { SAVE_VERSION } from '@/data/config'
 import { seedWorld } from '@/engine/newGame'
 import { INDUSTRIES } from '@/data/industries'
+import { AI_PROFILES, ARCHETYPE_BY_COMPANY } from '@/data/aiProfiles'
+import { hashId } from '@/engine/rng'
 import type { GameState } from '@/engine/types'
 
 type RawSave = Record<string, unknown>
@@ -115,6 +117,45 @@ export const MIGRATIONS: Record<number, Migration> = {
     }
 
     save.saveVersion = 5
+    return save
+  },
+
+  /**
+   * 5 → 6: a Fase 5b deu personalidade às concorrentes. Saves anteriores não
+   * têm agentes; sem eles as 28 empresas continuariam no piloto automático.
+   */
+  5: (save) => {
+    const ai = (save.ai ?? {}) as RawSave
+    ai.profiles = { ...AI_PROFILES }
+
+    const agents = (ai.agents ?? {}) as Record<string, unknown>
+    const order = Array.isArray(save.companyOrder) ? (save.companyOrder as string[]) : []
+    const agentOrder: string[] = []
+    for (const id of order) {
+      const company = (save.companies as Record<string, RawSave> | undefined)?.[id]
+      if (!company || company.managedBy === 'player') continue
+      if (!agents[id]) {
+        agents[id] = {
+          companyId: id,
+          profileId: ARCHETYPE_BY_COMPANY[id] ?? 'fortaleza',
+          stress: 0,
+          breakUntilDayIndex: null,
+          warFatigue: 0,
+          grudge: {},
+          lastReviewDayIndex: -1,
+          reviewOffset: hashId(id) % 90,
+          cooldowns: {},
+          badQuarters: 0,
+          imitationTargetId: null,
+        }
+      }
+      agentOrder.push(id)
+    }
+    ai.agents = agents
+    ai.agentOrder = agentOrder
+    save.ai = ai
+
+    save.saveVersion = 6
     return save
   },
 }

@@ -7,7 +7,7 @@
  */
 
 /** Versão do formato de save. Incrementar exige uma migration (§3.5). */
-export const SAVE_VERSION = 5
+export const SAVE_VERSION = 6
 
 // --- Tempo (GAME_DESIGN §3.1) ----------------------------------------------
 
@@ -375,11 +375,23 @@ export const OPERATIONS = {
   qualityBase: 0.55,
   qualityWeight: 0.45,
   qualityExponent: 0.9,
-  priceExponent: 0.6,
+  /**
+   * Expoente do preço na atratividade. Com 0,6 a elasticidade relativa efetiva
+   * ficava em ~1,0: um prêmio de 10% custava 9% de fatia e dobrava a margem, e
+   * todo agente subia preço para sempre. Em 1,4 o prêmio custa mais do que
+   * rende, e o preço volta a ter âncora competitiva.
+   */
+  priceExponent: 1.4,
   /** Elasticidade: quanto a atratividade responde a preço abaixo da média. */
   priceElasticity: 1.6,
   /** Teto do fator de preço, para não haver share infinito a preço zero. */
   priceFactorCap: 3,
+  /**
+   * Elasticidade da demanda **do setor** ao nível de preço. Sem ela só o preço
+   * relativo importava, e todo mundo podia subir preço junto sem perder volume:
+   * os agentes da Fase 5b levaram o setor inteiro a cobrar 2× em cinco anos.
+   */
+  marketPriceElasticity: 1.5,
 
   /** Retorno do tamanho do setor à tendência, por dia. */
   marketSizeReversion: 0.004,
@@ -449,4 +461,49 @@ export const OPERATIONS = {
   saleReputationWeight: 0.3,
   /** Piso do valuation como fração da receita anual. */
   saleRevenueFloor: 0.2,
+} as const
+
+// --- Guardrails da IA (spec §5.12) -----------------------------------------
+
+export const AI = {
+  /** Reavaliação estratégica a cada 90 dias, com offset hash(id) % 90. */
+  reviewIntervalDays: 90,
+  /** Gatilho fora do ciclo respeita este cooldown. */
+  triggerCooldownDays: 15,
+  /** Só muda se o ganho projetado superar isto. */
+  hysteresis: 0.03,
+  /** Variação máxima de preço por decisão. */
+  priceRateLimit: 0.15,
+  /** Cooldown por tipo de ação, em dias. */
+  actionCooldownDays: {
+    ajustarPreco: 45,
+    ajustarMarketing: 30,
+    investirPeD: 90,
+    contratar: 30,
+    demitir: 30,
+    demissaoEmMassa: 180,
+    expandirCapacidade: 60,
+    pagarDividendos: 90,
+    anunciarProduto: 120,
+  } as Record<string, number>,
+  /** Teto de marketing como fração da receita, para todo mundo. */
+  marketingCap: 0.3,
+  /** Trimestres com margem abaixo do mínimo até o agente recuar. */
+  warFatigueLimit: 3,
+  /** Decaimento diário do rancor. */
+  grudgeDecayPerDay: 0.005,
+  /** Estresse acumulado por trimestre ruim. */
+  stressPerLossQuarter: 0.08,
+  stressPerShareLoss: 0.05,
+  stressPerPriceDrop: 0.04,
+  stressReliefPerGoodQuarter: 0.03,
+  /** Quebra de personagem: duração e estresse remanescente. */
+  breakQuarters: 4,
+  breakStressReset: 0.3,
+  /** Trimestres ruins até o conselho trocar o CEO. */
+  badQuartersToSuccession: 6,
+  /** Semanas simuladas na projeção de um trimestre (resolução C5). */
+  projectionSteps: 13,
+  /** Passos de dias por semana projetada. */
+  projectionStepDays: 7,
 } as const

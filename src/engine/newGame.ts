@@ -18,6 +18,9 @@ import { createRng, range } from './rng'
 import { INDUSTRIES } from '../data/industries'
 import { COMPANY_SEEDS } from '../data/companies.seed'
 import { NEWS_OUTLETS } from '../data/newsOutlets'
+import { AI_PROFILES, ARCHETYPE_BY_COMPANY } from '../data/aiProfiles'
+import { hashId } from './rng'
+import { AI } from '../data/config'
 import { COMPANY_OPS, OPERATIONS } from '../data/config'
 import { fairValue } from './market'
 import {
@@ -286,6 +289,50 @@ export function seedWorld(state: GameState): void {
   }
   state.news.outlets = outlets
   state.news.outletOrder = outletOrder
+
+  // Agentes: um por empresa listada, com o offset de reavaliação escalonado por
+  // `hash(companyId) % 90` para o custo se distribuir pelos ticks (Regra 3).
+  const agents: GameState['ai']['agents'] = {}
+  const agentOrder: string[] = []
+  for (const id of companyOrder) {
+    const profileId = ARCHETYPE_BY_COMPANY[id] ?? 'fortaleza'
+    agents[id] = {
+      companyId: id,
+      profileId,
+      stress: 0,
+      breakUntilDayIndex: null,
+      warFatigue: 0,
+      grudge: {},
+      lastReviewDayIndex: -1,
+      reviewOffset: hashId(id) % AI.reviewIntervalDays,
+      cooldowns: {},
+      badQuarters: 0,
+      imitationTargetId: null,
+    }
+    agentOrder.push(id)
+
+    // A diretriz inicial já reflete o arquétipo: é o que faz a Oficina nascer
+    // gastando em P&D e o Abutre nascer acumulando caixa.
+    const profile = AI_PROFILES[profileId]
+    const company = companies[id]
+    if (company && profile) {
+      for (const rule of profile.hardRules) {
+        if (rule.kind === 'floor' && rule.field === 'rndRatio') company.directives.rndRatio = rule.value
+        if (rule.kind === 'floor' && rule.field === 'marketingRatio') {
+          company.directives.marketingRatio = rule.value
+        }
+        if (rule.kind === 'ceiling' && rule.field === 'rndRatio') company.directives.rndRatio = rule.value
+        if (rule.kind === 'ceiling' && rule.field === 'marketingRatio') {
+          company.directives.marketingRatio = rule.value
+        }
+      }
+      company.directives.cashReserveTarget = profile.cashReserveTarget
+      company.directives.minMargin = profile.minMargin
+    }
+  }
+  state.ai.profiles = { ...AI_PROFILES }
+  state.ai.agents = agents
+  state.ai.agentOrder = agentOrder
 
   state.industries = industries
   state.industryOrder = industryOrder

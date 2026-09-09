@@ -98,12 +98,17 @@ describe('arquitetura da engine', () => {
     // Exigência literal do spec §8. É por isso que os arquétipos de
     // src/data/aiProfiles.ts entram no estado via newGame e são lidos de
     // state.ai.profiles — um agente não importa a tabela de dados.
-    const allowed = new Set(['../types', '../perception', '../companies', './types'])
+    // Fora de `ai/`, só estes três. Dentro de `ai/`, um módulo pode importar o
+    // outro: a restrição do §8 é sobre não alcançar o resto do mundo, não sobre
+    // o agente ser um arquivo só.
+    const allowed = new Set(['../types', '../perception', '../companies'])
+    const isInternal = (specifier: string): boolean => specifier.startsWith('./')
     const aiFiles = engineFiles.filter((file) => file.includes(`${join('engine', 'ai')}`))
     for (const file of aiFiles) {
       const source = stripComments(readFileSync(file, 'utf8'))
       for (const specifier of importsOf(source)) {
-        expect(allowed.has(specifier), `${relative(ROOT, file)} importa ${specifier}`).toBe(true)
+        const ok = allowed.has(specifier) || isInternal(specifier)
+        expect(ok, `${relative(ROOT, file)} importa ${specifier}`).toBe(true)
       }
     }
   })

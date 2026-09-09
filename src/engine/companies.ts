@@ -32,6 +32,16 @@ export function cycleDemandFactor(industry: IndustryDefinition, state: GameState
   return Math.max(0.2, 1 + demandPull - ratePressure)
 }
 
+/**
+ * Resposta da demanda **do setor** ao nível de preço. É o que impede o setor
+ * inteiro de subir preço junto sem perder volume — sem isso o preço não tem
+ * âncora nenhuma.
+ */
+export function marketDemandFactor(averagePrice: number): number {
+  if (averagePrice <= 0) return OPERATIONS.priceFactorCap
+  return (1 / averagePrice) ** OPERATIONS.marketPriceElasticity
+}
+
 /** Fator de preço da atratividade: preço abaixo da média do setor atrai. */
 export function priceFactor(price: number, averagePrice: number): number {
   if (price <= 0) return OPERATIONS.priceFactorCap
@@ -135,7 +145,11 @@ export function allocateSector(
 
   const seasonality = industry.seasonality[state.date.month - 1] ?? 1
   const marketSize = state.industries[industry.id]?.marketSize ?? industry.marketSize
-  const dailyUnits = (marketSize / 365) * seasonality * cycleDemandFactor(industry, state)
+  const dailyUnits =
+    (marketSize / 365) *
+    seasonality *
+    cycleDemandFactor(industry, state) *
+    marketDemandFactor(averagePrice)
 
   return { averagePrice, dailyUnits, shares }
 }
@@ -252,6 +266,121 @@ export function stepCompanyDay(
     company.cash -= (drift * company.workforce.avgSalary) / 12
   } else if (drift < 0) {
     company.workforce.headcount = Math.max(1, company.workforce.headcount + drift)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Projeção hipotética (spec §5.12)
+// ---------------------------------------------------------------------------
+
+/** O que o agente enxerga de resultado ao projetar um candidato. */
+export interface Projection {
+  revenue: number
+  profit: number
+  cash: number
+  share: number
+  quality: number
+  brand: number
+  leverage: number
+  margin: number
+}
+
+/** Alteração que o candidato aplica na empresa antes de projetar. */
+export interface CandidateOverride {
+  price?: number
+  marketingRatio?: number
+  rndRatio?: number
+  headcountTarget?: number
+  capitalAdd?: number
+  payoutRatio?: number
+}
+
+function cloneForProjection(company: Company): Company {
+  return {
+    ...company,
+    workforce: { ...company.workforce },
+    directives: { ...company.directives },
+    profitHistory: [...company.profitHistory],
+    ownership: company.ownership.map((entry) => ({ ...entry })),
+    stock: company.stock ? { ...company.stock, history: [] } : null,
+  }
+}
+
+/**
+ * Roda um trimestre hipotético com **a mesma** `stepCompanyDay` da simulação
+ * real (spec §5.12): a IA não duplica regra de negócio, ela roda a engine em
+ * modo hipotético.
+ *
+ * Os concorrentes ficam **congelados** no que o `PublicView` mostra — decisão
+ * registrada no `GAME_DESIGN`: projetar o setor inteiro custaria quatro vezes o
+ * orçamento da resolução C5 e compraria pouco, porque dentro de um trimestre
+ * ninguém reage mesmo. É também o que a informação imperfeita da Regra 2 permite
+ * saber.
+ *
+ * Passo semanal, 13 iterações: mesma regra, custo sete vezes menor.
+ */
+export function projectQuarter(
+  state: GameState,
+  company: Company,
+  industry: IndustryDefinition,
+  rivals: Company[],
+  override: CandidateOverride,
+  steps = 13,
+  stepDays = 7,
+): Projection {
+  const subject = cloneForProjection(company)
+  if (override.price !== undefined) {
+    subject.price = override.price
+    subject.directives.price = override.price
+  }
+  if (override.marketingRatio !== undefined) subject.directives.marketingRatio = override.marketingRatio
+  if (override.rndRatio !== undefined) subject.directives.rndRatio = override.rndRatio
+  if (override.headcountTarget !== undefined) subject.directives.headcountTarget = override.headcountTarget
+  if (override.payoutRatio !== undefined) subject.directives.payoutRatio = override.payoutRatio
+  if (override.capitalAdd) {
+    subject.capitalStock += override.capitalAdd
+    subject.cash -= override.capitalAdd
+  }
+
+  const frozen = rivals.map(cloneForProjection)
+  const all = [subject, ...frozen]
+  const averagePrice = all.reduce((sum, item) => sum + item.price, 0) / all.length
+
+  let profit = 0
+  const seasonality = industry.seasonality[state.date.month - 1] ?? 1
+  const marketSize = state.industries[industry.id]?.marketSize ?? industry.marketSize
+  const dailyUnits =
+    (marketSize / 365) *
+    seasonality *
+    cycleDemandFactor(industry, state) *
+    marketDemandFactor(averagePrice)
+
+  let shareSum = 0
+  for (let step = 0; step < steps; step += 1) {
+    const scores = all.map((item) => attractiveness(item, averagePrice))
+    const total = scores.reduce((sum, value) => sum + value, 0)
+    const share = total > 0 ? (scores[0] ?? 0) / total : 0
+    shareSum += share
+
+    const cashBefore = subject.cash
+    const capacity = capacityOf(subject, industry) / 365
+    const units = Math.min(dailyUnits * share, capacity)
+    for (let day = 0; day < stepDays; day += 1) {
+      stepCompanyDay(state, subject, industry, units, dailyUnits * share)
+    }
+    profit += subject.cash - cashBefore
+  }
+
+  const revenue = subject.revenue
+  return {
+    revenue,
+    profit,
+    cash: subject.cash,
+    share: shareSum / steps,
+    quality: subject.productQuality,
+    brand: subject.brandAwareness,
+    leverage: revenue > 0 ? subject.debt / revenue : 0,
+    margin: revenue > 0 ? (profit * (365 / (steps * stepDays))) / revenue : 0,
   }
 }
 

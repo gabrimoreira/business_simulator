@@ -39,14 +39,10 @@ describe('serialização', () => {
 describe('migrations', () => {
   /** Desfaz na mão o que a migration N-1 → N deve refazer. */
   function migrated0(save: Record<string, unknown>): Record<string, unknown> {
-    const companies = save.companies as Record<string, Record<string, unknown>>
-    for (const company of Object.values(companies)) {
-      delete company.workforce
-      delete company.capitalStock
-      company.employees = []
-    }
-    const industries = save.industries as Record<string, Record<string, unknown>>
-    for (const industry of Object.values(industries)) delete industry.trendSize
+    const ai = save.ai as Record<string, unknown>
+    ai.agents = {}
+    ai.agentOrder = []
+    ai.profiles = {}
     return save
   }
 
@@ -56,20 +52,19 @@ describe('migrations', () => {
     // A migration mais nova (4 → 5) trocou a lista de funcionários pelo quadro
     // agregado e deu capital instalado a cada empresa. Um save da versão N-1 é
     // um save com `employees` e sem `workforce`.
-    const first = migrated0(legacy)
-    expect(first).toBeDefined()
+    // A migration mais nova (5 → 6) dá personalidade às concorrentes. Um save da
+    // versão N-1 é um save sem agente nenhum.
+    migrated0(legacy)
 
     const migrated = migrate(legacy)
-    const company = migrated.companies[migrated.companyOrder[0]!]!
 
     expect(migrated.saveVersion).toBe(SAVE_VERSION)
-    expect(company.workforce.headcount).toBeGreaterThan(0)
-    expect(company.workforce.avgSalary).toBeGreaterThan(0)
-    expect(company.capitalStock).toBeGreaterThan(0)
-    expect((company as unknown as Record<string, unknown>).employees).toBeUndefined()
-    for (const industryId of migrated.industryOrder) {
-      expect(migrated.industries[industryId]!.trendSize).toBeGreaterThan(0)
-    }
+    expect(migrated.ai.agentOrder).toHaveLength(28)
+    expect(Object.keys(migrated.ai.profiles)).toHaveLength(9)
+    const agent = migrated.ai.agents[migrated.ai.agentOrder[0]!]!
+    expect(agent.profileId).toBeDefined()
+    expect(agent.reviewOffset).toBeGreaterThanOrEqual(0)
+    expect(agent.reviewOffset).toBeLessThan(90)
   })
 
   it('percorre a cadeia inteira a partir da versão 0', () => {

@@ -711,6 +711,30 @@ já tem e a Fase 5 não conectou: **fundar com empréstimo**. O limite de crédi
 8× a renda mensal no Meridiano dá exatamente a ordem de grandeza do capital
 mínimo. É a primeira coisa a fazer antes de mexer em qualquer constante.
 
+### Ajustes da Fase 5b
+
+| O que estava errado | Sintoma | Correção |
+|---|---|---|
+| Histerese comparada contra **deltas** | nenhum candidato passava de 0,03 e os 28 agentes ficaram cinco anos sem mudar um preço sequer | a utilidade pontua o **estado projetado**, e o limiar é relativo: `U(candidato) > U(statusQuo) × 1,03`, como o §5.12 escreve |
+| Demanda do setor cega ao **nível** de preço | com só o preço relativo importando, todo mundo subia junto sem perder volume: o setor inteiro cobrava 2× em cinco anos | elasticidade de mercado de 1,5 sobre o preço médio |
+| Expoente de preço na atratividade em 0,6 | elasticidade relativa efetiva de ~1,0: prêmio de 10% custava 9% de fatia e dobrava a margem, então subir preço sempre vencia | expoente 1,4, elasticidade efetiva 2,2 |
+| Fadiga de guerra sem teto | contador chegava a 20 e o agente nunca mais brigava: a guerra de preços deixava de ser episódio e virava estado | teto em `warFatigueLimit + 2` |
+
+**Decisão registrada — projeção com concorrentes congelados.** O §5.12 exige que
+`simularTrimestre` rode o mesmo `companies.ts`. Desde a Fase 5 a receita depende
+da alocação do setor inteiro, então projetar uma decisão exigiria simular as
+rivais junto — quatro vezes o orçamento da C5. A projeção usa as **mesmas
+funções** (`allocateSector` + `stepCompanyDay`) mantendo as rivais paradas no que
+o `PublicView` mostra. Não duplica regra nenhuma; assume que ninguém reage dentro
+do trimestre, que é o que a informação imperfeita da Regra 2 permite saber.
+
+**Comportamento observado em cinco anos** (mesmo seed, sem intervenção):
+o Bandeirante corta preço para 0,86 e aceita margem negativa por fatia; a Oficina
+segura P&D em 25% e margem de 9%; o Espelho fica com P&D zerado; a Vitrine com
+marketing em 15%; o Padrinho compra fatia com marketing e chega a 37% do setor.
+Um conselho já trocou o CEO de uma Vitrine por uma Fortaleza depois de seis
+trimestres ruins.
+
 ### O que a Fase 3 mediu, e o que ficou em aberto
 
 Aos 65 anos, em três seeds:
