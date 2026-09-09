@@ -11,6 +11,7 @@ import { buildOwnership, seedWorld } from '@/engine/newGame'
 import { INDUSTRIES } from '@/data/industries'
 import { AI_PROFILES, ARCHETYPE_BY_COMPANY } from '@/data/aiProfiles'
 import { TYCOON_SEEDS } from '@/data/tycoons'
+import { POLITICIAN_SEEDS } from '@/data/politicians'
 import { hashId } from '@/engine/rng'
 import type { GameState } from '@/engine/types'
 
@@ -227,6 +228,44 @@ export const MIGRATIONS: Record<number, Migration> = {
     save.ai = ai
 
     save.saveVersion = 8
+    return save
+  },
+
+  /**
+   * 8 → 9: a Fase 7 abriu o Congresso. Saves anteriores não têm político nenhum
+   * — e sem casa não há quem proponha, vote ou receba doação.
+   */
+  8: (save) => {
+    const politics = (save.politics ?? {}) as RawSave
+    const politicians = (politics.politicians ?? {}) as Record<string, unknown>
+    const order: string[] = []
+    for (const seed of POLITICIAN_SEEDS) {
+      if (!politicians[seed.id]) {
+        politicians[seed.id] = {
+          id: seed.id,
+          name: seed.name,
+          party: seed.party,
+          stance: { ...seed.stance },
+          approval: seed.approval,
+          office: seed.office,
+          loyaltyToPlayer: 0,
+          donationsFromPlayer: 0,
+          patronageOf: [],
+        }
+      }
+      order.push(seed.id)
+    }
+    politics.politicians = politicians
+    politics.politicianOrder = order
+    if (!politics.policies) politics.policies = {}
+    if (!Array.isArray(politics.policyOrder)) politics.policyOrder = []
+    if (!Array.isArray(politics.donations)) politics.donations = []
+    if (!Array.isArray(politics.lobbyEfforts)) politics.lobbyEfforts = []
+    if (!Array.isArray(politics.investigations)) politics.investigations = []
+    if (!Array.isArray(politics.elections)) politics.elections = []
+    save.politics = politics
+
+    save.saveVersion = 9
     return save
   },
 }

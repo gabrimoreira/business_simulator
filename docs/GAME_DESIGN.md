@@ -779,6 +779,35 @@ fechar o controle passa a exigir a oferta pública. É o comportamento pretendid
 e o teste que antes afirmava "comprar o float dá o controle" agora afirma o
 contrário, junto com o caminho que funciona.
 
+### Ajustes da Fase 7
+
+**Decisão registrada — como a política chega no imposto.** O efeito de uma
+política aprovada é **recalculado a partir do conjunto de aprovadas**, não somado
+incrementalmente ao estado. Somar delta a cada aprovação parece mais barato, mas
+acumula erro: revogar não desfaz e um save carregado reaplica. Recalcular custa
+uma varredura por votação — não por tick. Tem teste: reaplicar não acumula, e
+revogar devolve a alíquota ao valor de tabela.
+
+**Notoriedade, revisada como eu tinha prometido.** Ela agora **decai** 0,04 ao
+dia, e a investigação separa duas coisas que estavam misturadas: o que chama
+atenção e o que condena. Aquisição hostil sobe notoriedade e abre inquérito, mas
+não é crime — a condenação sai de `provas / (provas + 8)`, e prova é doação
+rastreável, matéria plantada e demissão em massa. Um jogador que só faz M&A é
+investigado e absolvido; quem financia político com dinheiro de empresa, não.
+
+| O que estava errado | Sintoma | Correção |
+|---|---|---|
+| Cooldown de defesa global | o conselho respondia ao maior acionista e o segundo atacante entrava de graça | cooldown **por atacante**, e a ameaça escolhida é a maior ainda não respondida |
+| Defesa escolhida sem alternativa | sem float não há cavaleiro branco: o conselho gastava o rancor, não fazia nada e não registrava | tenta as quatro defesas em ordem de preferência do arquétipo |
+| Tycoon divulgava a cada compra | 109 comunicados sobre a mesma empresa afogavam o feed | divulga ao cruzar faixa, como o jogador |
+| Congresso esgotava o catálogo | nove projetos em cinco anos e quatro décadas de silêncio | projeto rejeitado volta depois de dois anos |
+
+**Consequência de gameplay:** com defesas e rivais ativos, tomar uma listada
+ficou **caro**. Comprar o float não basta, e fechar o controle exigiu, no teste,
+seis rodadas de oferta a 140% de prêmio com caixa de bilhões. O critério de
+aceite da Fase 6 continua verdadeiro, mas o preço subiu — é o antagonismo
+funcionando.
+
 ### O que a Fase 3 mediu, e o que ficou em aberto
 
 Aos 65 anos, em três seeds:

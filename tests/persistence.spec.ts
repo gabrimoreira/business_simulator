@@ -39,12 +39,10 @@ describe('serialização', () => {
 describe('migrations', () => {
   /** Desfaz na mão o que a migration N-1 → N deve refazer. */
   function migrated0(save: Record<string, unknown>): Record<string, unknown> {
-    const ai = save.ai as Record<string, unknown>
-    // Volta à versão 7: sem rivais e sem a marca de CEO nomeado.
-    ai.tycoons = {}
-    ai.tycoonOrder = []
-    const agents = ai.agents as Record<string, Record<string, unknown>>
-    for (const agent of Object.values(agents)) delete agent.appointedByPlayer
+    // Volta à versão 8: sem Congresso.
+    const politics = save.politics as Record<string, unknown>
+    politics.politicians = {}
+    politics.politicianOrder = []
     return save
   }
 
@@ -54,19 +52,18 @@ describe('migrations', () => {
     // A migration mais nova (4 → 5) trocou a lista de funcionários pelo quadro
     // agregado e deu capital instalado a cada empresa. Um save da versão N-1 é
     // um save com `employees` e sem `workforce`.
-    // A migration mais nova (7 → 8) traz os tycoons rivais e a marca de CEO
-    // nomeado. Um save da versão N-1 não tem rival nenhum.
+    // A migration mais nova (8 → 9) abre o Congresso. Um save da versão N-1 não
+    // tem político nenhum — e sem casa não há quem proponha, vote ou receba.
     migrated0(legacy)
 
     const migrated = migrate(legacy)
 
     expect(migrated.saveVersion).toBe(SAVE_VERSION)
-    expect(migrated.ai.tycoonOrder.length).toBeGreaterThan(0)
-    const tycoon = migrated.ai.tycoons[migrated.ai.tycoonOrder[0]!]!
-    expect(tycoon.cash).toBeGreaterThan(0)
-    expect(tycoon.targetCompanyId).toBeNull()
-    const agent = migrated.ai.agents[migrated.ai.agentOrder[0]!]!
-    expect(agent.appointedByPlayer).toBe(false)
+    expect(migrated.politics.politicianOrder.length).toBeGreaterThan(0)
+    const politician = migrated.politics.politicians[migrated.politics.politicianOrder[0]!]!
+    expect(politician.name.length).toBeGreaterThan(0)
+    expect(politician.loyaltyToPlayer).toBe(0)
+    expect(Array.isArray(migrated.politics.policyOrder)).toBe(true)
   })
 
   it('percorre a cadeia inteira a partir da versão 0', () => {

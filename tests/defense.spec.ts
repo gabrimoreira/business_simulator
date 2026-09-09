@@ -15,50 +15,61 @@ import { advance, fresh, funded } from './helpers'
 
 const TARGET = 'pulso'
 
-/** Compra até cruzar a fatia pedida, respeitando o teto de volume diário. */
-function accumulateTo(state: GameState, companyId: string, target: number): GameState {
-  let current = state
-  for (let i = 0; i < 400; i += 1) {
-    const company = current.companies[companyId]!
-    if (stakeOf(company, 'player') >= target) break
-    const float = company.ownership.find((entry) => entry.holderId === 'float')?.shares ?? 0
-    const lot = Math.min(Math.floor(company.stock!.sharesOutstanding * 0.004), float)
-    if (lot <= 0) break
-    current = applyAction(current, {
-      kind: 'comprarAcao',
-      companyId,
-      shares: lot,
-      limitPrice: null,
-    }).state
-    current = advance(current, 1).state
+/**
+ * Monta a posição direto no estado, com a divulgação já publicada.
+ *
+ * Acumular comprando funciona (há teste disso em `control.spec`), mas amarra o
+ * teste da **defesa** ao fluxo de RNG de todos os outros sistemas: qualquer
+ * fase nova desloca os preços e o alvo dos rivais, e o teste passa a medir
+ * outra coisa. Aqui o que está sob teste é a reação do conselho.
+ */
+function threatened(stake = DEFENSE.wakeStake + 0.01): GameState {
+  const base = advance(funded(fresh(), 2_000_000_000), 90).state
+  const company = base.companies[TARGET]!
+  const shares = Math.round(company.stock!.sharesOutstanding * stake)
+  const float = company.ownership.find((entry) => entry.holderId === 'float')!
+
+  return {
+    ...base,
+    companies: {
+      ...base.companies,
+      [TARGET]: {
+        ...company,
+        ownership: [
+          ...company.ownership.map((entry) =>
+            entry.holderId === 'float' ? { ...entry, shares: float.shares - shares } : { ...entry },
+          ),
+          { holderId: 'player', shares },
+        ],
+      },
+    },
+    ownershipDisclosures: [
+      ...base.ownershipDisclosures,
+      {
+        id: `disc-teste-${TARGET}`,
+        companyId: TARGET,
+        holderId: 'player',
+        stakePct: stake,
+        dayIndex: base.date.dayIndex,
+      },
+    ],
   }
-  return current
 }
 
 describe('defesa do conselho', () => {
   it('acumular 5% dispara reação defensiva em menos de 15 dias', () => {
-    const start = advance(funded(fresh(), 2_000_000_000), 90).state
-    const crossed = accumulateTo(start, TARGET, DEFENSE.wakeStake + 0.01)
-    expect(stakeOf(crossed.companies[TARGET]!, 'player')).toBeGreaterThanOrEqual(DEFENSE.wakeStake)
+    const start = threatened()
+    const after = advance(start, 15).state
 
-    const after = advance(crossed, 15).state
     const against = after.ai.defenses.filter(
       (defense) => defense.companyId === TARGET && defense.againstId === 'player',
     )
     expect(against.length).toBeGreaterThan(0)
-
-    // O prazo conta a partir da **divulgação** que acordou o conselho, não do
-    // fim da acumulação: a defesa costuma vir antes de eu parar de comprar.
-    const disclosure = after.ownershipDisclosures.find(
-      (item) => item.companyId === TARGET && item.holderId === 'player',
-    )
-    expect(disclosure).toBeDefined()
-    expect(against[0]!.dayIndex - disclosure!.dayIndex).toBeLessThanOrEqual(15)
+    expect(against[0]!.dayIndex - start.date.dayIndex).toBeLessThanOrEqual(15)
   })
 
   it('a defesa vira manchete: o jogador precisa ver que acordou o conselho', () => {
-    const start = advance(funded(fresh(), 2_000_000_000), 90).state
-    const after = advance(accumulateTo(start, TARGET, 0.06), 15).state
+    const after = advance(threatened(), 15).state
     expect(
       after.news.headlines.some(
         (headline) =>
@@ -70,10 +81,8 @@ describe('defesa do conselho', () => {
   })
 
   it('o conselho marca rancor em quem atacou', () => {
-    const start = advance(funded(fresh(), 2_000_000_000), 90).state
-    const after = advance(accumulateTo(start, TARGET, 0.06), 15).state
-    const agent = after.ai.agents[TARGET]
-    expect(agent?.grudge['player'] ?? 0).toBeGreaterThan(0)
+    const after = advance(threatened(), 15).state
+    expect(after.ai.agents[TARGET]?.grudge['player'] ?? 0).toBeGreaterThan(0)
   })
 })
 

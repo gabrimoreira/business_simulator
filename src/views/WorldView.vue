@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import BankCard from '@/components/BankCard.vue'
-import EmptyState from '@/components/EmptyState.vue'
+import PoliticsPanel from '@/components/PoliticsPanel.vue'
 import ScreenTitle from '@/components/ScreenTitle.vue'
 import { useGameStore } from '@/stores/game'
 import { formatMoney, formatPercent } from '@/lib/format'
@@ -20,6 +20,7 @@ const PHASE_LABEL: Record<string, string> = {
 const loans = computed(() => game.state?.banking.loans ?? [])
 const cards = computed(() => game.state?.banking.cards ?? [])
 const score = computed(() => game.state?.player.creditScore ?? 0)
+const playerOffice = computed(() => game.state?.player.office ?? null)
 
 function bankName(id: string): string {
   return findBank(id)?.name ?? id
@@ -130,12 +131,11 @@ function payoff(loanId: string, amount: number): void {
     </section>
 
     <section class="px-4 pt-4">
-      <h2 class="pb-2 text-sm font-medium text-muted">Política</h2>
-      <EmptyState
-        title="Sem eleição no horizonte"
-        description="Doações, lobby, eleições a cada quatro anos e políticas que mudam imposto, subsídio e regra de crédito — inclusive contra você."
-        phase="Fase 7"
-      />
+      <div class="flex items-baseline justify-between pb-2">
+        <h2 class="text-sm font-medium text-muted">Política</h2>
+        <span v-if="playerOffice" class="text-[11px] text-accent">você é {{ playerOffice }}</span>
+      </div>
+      <PoliticsPanel />
     </section>
   </div>
 </template>

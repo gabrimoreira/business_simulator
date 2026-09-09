@@ -21,6 +21,7 @@ import { COMPANY_SEEDS, OWNER_BLOCKS } from '../data/companies.seed'
 import { NEWS_OUTLETS } from '../data/newsOutlets'
 import { AI_PROFILES, ARCHETYPE_BY_COMPANY } from '../data/aiProfiles'
 import { TYCOON_SEEDS } from '../data/tycoons'
+import { POLITICIAN_SEEDS } from '../data/politicians'
 import { hashId } from './rng'
 import { AI } from '../data/config'
 import { COMPANY_OPS, OPERATIONS } from '../data/config'
@@ -360,6 +361,25 @@ export function seedWorld(state: GameState): void {
   }
   state.ai.tycoons = tycoons
   state.ai.tycoonOrder = tycoonOrder
+
+  const politicians: GameState['politics']['politicians'] = {}
+  const politicianOrder: string[] = []
+  for (const seed of POLITICIAN_SEEDS) {
+    politicians[seed.id] = {
+      id: seed.id,
+      name: seed.name,
+      party: seed.party,
+      stance: { ...seed.stance },
+      approval: seed.approval,
+      office: seed.office,
+      loyaltyToPlayer: 0,
+      donationsFromPlayer: 0,
+      patronageOf: [],
+    }
+    politicianOrder.push(seed.id)
+  }
+  state.politics.politicians = politicians
+  state.politics.politicianOrder = politicianOrder
 
   state.industries = industries
   state.industryOrder = industryOrder

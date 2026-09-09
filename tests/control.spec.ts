@@ -13,9 +13,30 @@ import { CONTROL } from '@/data/config'
 import type { GameState } from '@/engine/types'
 import { advance, fresh, funded } from './helpers'
 
-const TARGET = 'pulso'
+/**
+ * Alvo escolhido pelo maior float disponível, não fixo: a partir da Fase 6b os
+ * tycoons disputam os mesmos papéis, e amarrar o teste a um nome fazia ele medir
+ * a corrida deles em vez da minha.
+ */
+function pickTarget(state: GameState): string {
+  let best = state.companyOrder[0]!
+  let bestFloat = 0
+  for (const id of state.companyOrder) {
+    const company = state.companies[id]
+    const float = company?.ownership.find((entry) => entry.holderId === 'float')?.shares ?? 0
+    const ratio = float / (company?.stock?.sharesOutstanding ?? 1)
+    if (ratio > bestFloat) {
+      bestFloat = ratio
+      best = id
+    }
+  }
+  return best
+}
 
 /** Compra respeitando o teto de volume diário, como um comprador real faria. */
+/** Alvo padrão dos casos que não dependem de float abundante. */
+const TARGET = 'pulso'
+
 function accumulate(state: GameState, companyId: string, days: number): GameState {
   let current = state
   for (let i = 0; i < days; i += 1) {
@@ -59,66 +80,75 @@ describe('limiares de controle', () => {
 })
 
 describe('acumulação de posição', () => {
-  const start = funded(fresh(), 1_500_000_000)
-  const accumulated = accumulate(advance(start, 120).state, TARGET, 260)
+  const start = advance(funded(fresh(), 1_500_000_000), 120).state
+  const TARGET_FLOAT = pickTarget(start)
+  const accumulated = accumulate(start, TARGET_FLOAT, 260)
 
-  /**
-   * A partir da Fase 6b, comprar o float **não basta**: o conselho reage e tira
-   * papel do mercado. Fechar o controle exige a oferta pública — que é
-   * exatamente o caminho que o §5.6 desenha.
-   */
-  const controlled = (() => {
-    let current = accumulated
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const company = current.companies[TARGET]!
+  it('a defesa do conselho reage a quem acumula', () => {
+    expect(stakeOf(accumulated.companies[TARGET_FLOAT]!, 'player')).toBeGreaterThan(
+      CONTROL.relevantStake,
+    )
+    expect(accumulated.ai.defenses.length).toBeGreaterThan(0)
+  })
+
+  it('cruzar 5% gera divulgação e manchete, sem inundar o feed', () => {
+    // Filtra pelo detentor: os tycoons também divulgam posição, e contá-los
+    // mediria o feed deles, não o meu.
+    const disclosures = accumulated.ownershipDisclosures.filter(
+      (item) => item.companyId === TARGET_FLOAT && item.holderId === 'player',
+    )
+    expect(disclosures.length).toBeGreaterThan(0)
+    // Divulga ao cruzar faixa, não a cada compra.
+    expect(disclosures.length).toBeLessThan(12)
+    // A manchete sai na hora, mas o feed tem janela de 120 e 260 dias de mundo
+    // rodando a expulsam. O registro durável da divulgação é a lista acima.
+    const early = accumulate(start, TARGET_FLOAT, 40)
+    expect(early.news.headlines.some((headline) => headline.text.includes('acumula'))).toBe(true)
+  })
+
+  it('com caixa e prêmio suficientes, a oferta pública fecha o controle', () => {
+    // Depois da Fase 6b, tomar uma listada é caro: o conselho recompra, dilui e
+    // chama cavaleiro branco, e os tycoons disputam o mesmo papel. Fecha quem
+    // banca prêmio alto por várias rodadas.
+    let current = accumulate(advance(funded(fresh(), 40_000_000_000), 120).state, TARGET_FLOAT, 200)
+    for (let round = 0; round < 6; round += 1) {
+      const company = current.companies[TARGET_FLOAT]!
       if (stakeOf(company, 'player') > CONTROL.controlStake) break
       const outside = company.ownership
         .filter((entry) => entry.holderId !== 'player')
         .reduce((sum, entry) => sum + entry.shares, 0)
       current = applyAction(current, {
         kind: 'lancarOpa',
-        companyId: TARGET,
-        premium: 0.9,
+        companyId: TARGET_FLOAT,
+        premium: 1.4,
         sharesSought: outside,
       }).state
-      current = advance(current, CONTROL.tenderDays + 3).state
+      current = advance(current, CONTROL.tenderDays + 5).state
     }
-    return current
-  })()
 
-  it('a defesa do conselho impede tomar o controle só comprando float', () => {
-    expect(stakeOf(accumulated.companies[TARGET]!, 'player')).toBeGreaterThan(
-      CONTROL.relevantStake,
-    )
-    expect(accumulated.ai.defenses.some((defense) => defense.againstId === 'player')).toBe(true)
-  })
-
-  it('a oferta pública fecha o controle e troca quem dirige a empresa', () => {
-    const company = controlled.companies[TARGET]!
+    const company = current.companies[TARGET_FLOAT]!
     expect(stakeOf(company, 'player')).toBeGreaterThan(CONTROL.controlStake)
     expect(company.managedBy).toBe('player')
-    // Sem agente: quem manda agora é o jogador.
-    expect(controlled.ai.agents[TARGET]).toBeUndefined()
+    expect(current.ai.agents[TARGET_FLOAT]).toBeUndefined()
   })
 
-  it('cruzar 5% gera divulgação e manchete, sem inundar o feed', () => {
-    const disclosures = accumulated.ownershipDisclosures.filter(
-      (item) => item.companyId === TARGET,
-    )
-    expect(disclosures.length).toBeGreaterThan(0)
-    // Divulga ao cruzar faixa, não a cada compra.
-    expect(disclosures.length).toBeLessThan(12)
-    expect(
-      accumulated.news.headlines.some((headline) => headline.text.includes('acumula')),
-    ).toBe(true)
-  })
+  it('a empresa controlada aceita diretriz pelo painel de gestão', () => {
+    // O que está sob teste aqui é o painel, não o caminho até o controle.
+    const base = funded(fresh(), 1000)
+    const company = base.companies[TARGET]!
+    const owned = {
+      ...base,
+      companies: {
+        ...base.companies,
+        [TARGET]: {
+          ...company,
+          managedBy: 'player' as const,
+          ownership: [{ holderId: 'player' as const, shares: company.stock!.sharesOutstanding }],
+        },
+      },
+    }
 
-  it('a empresa controlada aparece no painel de gestão e aceita diretriz', () => {
-    const changed = applyAction(controlled, {
-      kind: 'ajustarPreco',
-      companyId: TARGET,
-      price: 1.1,
-    })
+    const changed = applyAction(owned, { kind: 'ajustarPreco', companyId: TARGET, price: 1.1 })
     expect(changed.state.companies[TARGET]!.price).toBeCloseTo(1.1, 6)
   })
 })

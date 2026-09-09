@@ -147,6 +147,57 @@ function emitDecisionEvent(draft: GameState, company: Company, label: string, pr
   })
 }
 
+/**
+ * Contra-lobby (spec §5.12 reações): o Padrinho gasta em política o que os
+ * outros gastam em P&D. É o que faz o lobby virar leilão — quem gastou mais
+ * move o `supportPct`, e o dinheiro do rival cancela o seu real a real.
+ */
+function counterLobby(draft: GameState, company: Company, agent: AgentState, log: LogEntry[]): void {
+  const profile = draft.ai.profiles[agent.profileId]
+  if (!profile || profile.weights.influencia < 0.5) return
+  if (company.cash <= 0) return
+
+  for (const policyId of draft.politics.policyOrder) {
+    const policy = draft.politics.policies[policyId]
+    if (!policy || policy.status !== 'tramitando') continue
+
+    const taxDelta = policy.effects.taxRateByIndustry?.[company.industryId] ?? 0
+    const subsidy = policy.effects.subsidyByIndustry?.[company.industryId] ?? 0
+    const tariff = policy.effects.importTariffByIndustry?.[company.industryId] ?? 0
+    const benefit = -taxDelta + subsidy + tariff
+    if (Math.abs(benefit) < 0.005) continue
+
+    const already = draft.politics.lobbyEfforts.some(
+      (effort) => effort.policyId === policyId && effort.actorId === company.id,
+    )
+    if (already) continue
+
+    const amount = company.cash * 0.05 * profile.weights.influencia
+    if (amount <= 0) continue
+
+    company.cash -= amount
+    draft.politics.lobbyEfforts.push({
+      id: `lob-${company.id}-${policyId}-${draft.date.dayIndex}`,
+      policyId,
+      actorId: company.id,
+      amount,
+      direction: benefit > 0 ? 1 : -1,
+      dayIndex: draft.date.dayIndex,
+    })
+
+    log.push({
+      id: `lob-npc-${company.id}-${draft.date.dayIndex}`,
+      dayIndex: draft.date.dayIndex,
+      severity: 'info',
+      source: 'ai',
+      text: `${company.name} entra no lobby ${benefit > 0 ? 'a favor' : 'contra'} de ${policy.name}.`,
+      amount: null,
+    })
+    emitDecisionEvent(draft, company, `faz lobby sobre ${policy.name}`, 5)
+    return
+  }
+}
+
 /** Trimestre fechado: estresse, fadiga, quebra de personagem e sucessão. */
 function reviewQuarter(draft: GameState, company: Company, agent: AgentState, log: LogEntry[]): void {
   const profile = draft.ai.profiles[agent.profileId]
@@ -235,20 +286,29 @@ interface Threat {
  * A defesa precisa acontecer na faixa de 5% a 50%, antes de o atacante fechar o
  * controle: passado esse ponto o agente já foi embora e não há quem reaja.
  */
-function detectThreat(draft: GameState, companyId: string): Threat | null {
+function detectThreat(draft: GameState, companyId: string, agent: AgentState): Threat | null {
   let worst: Threat | null = null
+
+  /** Atacante já respondido continua no cooldown dele; passa para o próximo. */
+  const pending = (holderId: string): boolean =>
+    draft.date.dayIndex >= (agent.cooldowns[`defesa:${holderId}`] ?? -1)
 
   for (const disclosure of draft.publicView.disclosures) {
     if (disclosure.companyId !== companyId) continue
     if (disclosure.stakePct < DEFENSE.wakeStake) continue
     if (draft.date.dayIndex - disclosure.dayIndex > AI.triggerCooldownDays) continue
+    if (!pending(disclosure.holderId)) continue
     if (!worst || disclosure.stakePct > worst.stake) {
       worst = { holderId: disclosure.holderId, stake: disclosure.stakePct, hostile: false }
     }
   }
 
+  // Oferta aberta é a ameaça mais grave e passa na frente — mas só de quem
+  // ainda não foi respondido. Sem esse filtro o conselho responde eternamente
+  // ao maior acionista e o segundo atacante entra sem resistência.
   for (const tender of draft.tenders) {
     if (tender.companyId !== companyId || tender.status !== 'aberta') continue
+    if (!pending(tender.bidderId)) continue
     worst = { holderId: tender.bidderId, stake: worst?.stake ?? DEFENSE.wakeStake, hostile: true }
   }
 
@@ -275,43 +335,49 @@ function defend(
   agent.grudge[threat.holderId] = (agent.grudge[threat.holderId] ?? 0) + weight * profile.vindictiveness
 
   const cashPower = company.revenue > 0 ? company.cash / company.revenue : 0
-  let kind: DefenseKind
-  if (cashPower > 0.15 && profile.weights.caixa >= 0.5) kind = 'recompra'
-  else if (agent.profileId === 'herdeiro' || agent.profileId === 'padrinho') kind = 'pilulaDeVeneno'
-  else if (cashPower > 0.08) kind = 'bancoDeDefesa'
-  else kind = 'cavaleiroBranco'
 
+  // Preferência pelo arquétipo, mas com alternativas: a defesa escolhida pode
+  // simplesmente não ser executável — sem float não há cavaleiro branco, sem
+  // caixa não há recompra. Antes disso o conselho ficava paralisado, gastava o
+  // rancor e não registrava nada.
+  const preference: DefenseKind[] =
+    cashPower > 0.15 && profile.weights.caixa >= 0.5
+      ? ['recompra', 'pilulaDeVeneno', 'bancoDeDefesa', 'cavaleiroBranco']
+      : agent.profileId === 'herdeiro' || agent.profileId === 'padrinho'
+        ? ['pilulaDeVeneno', 'cavaleiroBranco', 'bancoDeDefesa', 'recompra']
+        : cashPower > 0.08
+          ? ['bancoDeDefesa', 'cavaleiroBranco', 'pilulaDeVeneno', 'recompra']
+          : ['cavaleiroBranco', 'pilulaDeVeneno', 'bancoDeDefesa', 'recompra']
+
+  let kind: DefenseKind | null = null
   let text = ''
   let cost = 0
 
-  if (kind === 'recompra') {
-    const budget = company.cash * DEFENSE.buybackCashRatio
-    const shares = buyback(draft, company, budget)
-    if (shares <= 0) kind = 'cavaleiroBranco'
-    else {
+  for (const option of preference) {
+    if (option === 'recompra') {
+      const shares = buyback(draft, company, company.cash * DEFENSE.buybackCashRatio)
+      if (shares <= 0) continue
       cost = shares * company.stock.price
       text = `${company.name} anuncia recompra de ações e encarece o próprio papel.`
+    } else if (option === 'pilulaDeVeneno') {
+      if (poisonPill(company, threat.holderId, DEFENSE.poisonPillIssue) <= 0) continue
+      text = `${company.name} aprova emissão diluidora contra investidor hostil.`
+    } else if (option === 'bancoDeDefesa') {
+      cost = company.cash * DEFENSE.defenseBankCashRatio
+      if (cost <= 0) continue
+      company.cash -= cost
+      company.reputation = Math.min(100, company.reputation + 8)
+      text = `${company.name} contrata banco de defesa e fecha posição com o conselho.`
+    } else {
+      if (whiteKnight(company, `cavaleiro@${company.id}`, DEFENSE.whiteKnightFloat) <= 0) continue
+      text = `${company.name} encontra cavaleiro branco e tira papéis do mercado.`
     }
+    kind = option
+    break
   }
 
-  if (kind === 'pilulaDeVeneno') {
-    const issued = poisonPill(company, threat.holderId, DEFENSE.poisonPillIssue)
-    if (issued <= 0) kind = 'cavaleiroBranco'
-    else text = `${company.name} aprova emissão diluidora contra investidor hostil.`
-  }
-
-  if (kind === 'bancoDeDefesa') {
-    cost = company.cash * DEFENSE.defenseBankCashRatio
-    company.cash -= cost
-    company.reputation = Math.min(100, company.reputation + 8)
-    text = `${company.name} contrata banco de defesa e fecha posição com o conselho.`
-  }
-
-  if (kind === 'cavaleiroBranco') {
-    const shares = whiteKnight(company, `cavaleiro@${company.id}`, DEFENSE.whiteKnightFloat)
-    if (shares <= 0) return
-    text = `${company.name} encontra cavaleiro branco e tira papéis do mercado.`
-  }
+  // Nenhuma defesa executável hoje: tenta de novo amanhã, sem queimar cooldown.
+  if (!kind) return
 
   draft.ai.defenses.push({
     id: `def-${company.id}-${draft.date.dayIndex}`,
@@ -321,7 +387,10 @@ function defend(
     dayIndex: draft.date.dayIndex,
     cost,
   })
-  agent.cooldowns.defesa = draft.date.dayIndex + DEFENSE.cooldownDays
+  // Cooldown **por atacante**: um conselho que acabou de recomprar contra um
+  // rival ainda reage quando aparece um segundo. Com um cooldown global, o
+  // segundo a chegar entrava de graça.
+  agent.cooldowns[`defesa:${threat.holderId}`] = draft.date.dayIndex + DEFENSE.cooldownDays
 
   log.push({
     id: `def-${company.id}-${draft.date.dayIndex}`,
@@ -440,7 +509,16 @@ function stepTycoons(draft: GameState, log: LogEntry[]): void {
       if (cost > 0) {
         tycoon.cash -= cost
         const now = stakeOf(target, tycoonId)
-        if (now >= CONTROL.relevantStake) {
+        // Divulga ao cruzar faixa, como o jogador: a cada compra gerava mais de
+        // cem comunicados sobre a mesma empresa e afogava o feed.
+        const step = Math.floor(now * 20) / 20
+        const announced = draft.ownershipDisclosures.some(
+          (item) =>
+            item.companyId === target.id &&
+            item.holderId === tycoonId &&
+            Math.floor(item.stakePct * 20) / 20 === step,
+        )
+        if (now >= CONTROL.relevantStake && !announced) {
           draft.ownershipDisclosures.push({
             id: `disc-${target.id}-${tycoonId}-${draft.date.dayIndex}`,
             companyId: target.id,
@@ -538,9 +616,8 @@ export function stepAi(draft: GameState, markers: DayMarkers, log: LogEntry[]): 
 
     // Gatilho fora do ciclo: participação relevante divulgada no próprio capital
     // acorda o conselho, com cooldown próprio (Regra 3).
-    const threat = detectThreat(draft, id)
-    const defenseReady = draft.date.dayIndex >= (agent.cooldowns.defesa ?? -1)
-    if (threat && defenseReady && threat.holderId !== id) {
+    const threat = detectThreat(draft, id, agent)
+    if (threat && threat.holderId !== id) {
       defend(draft, company, agent, threat, log)
     }
 
@@ -552,6 +629,8 @@ export function stepAi(draft: GameState, markers: DayMarkers, log: LogEntry[]): 
     if (!industry || !profile) continue
 
     agent.lastReviewDayIndex = draft.date.dayIndex
+
+    counterLobby(draft, company, agent, log)
 
     // Obrigações do arquétipo entram sempre, fora do leque de utilidade.
     const broken = agent.breakUntilDayIndex !== null && draft.date.dayIndex < agent.breakUntilDayIndex

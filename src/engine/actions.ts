@@ -27,7 +27,9 @@ import {
 import { findBank } from '../data/banks'
 import { findOutlet } from '../data/newsOutlets'
 import { findIndustry } from '../data/industries'
-import { CONTROL, OPERATIONS } from '../data/config'
+import { CONTROL, OPERATIONS, POLITICS } from '../data/config'
+import { findPolicyDef } from '../data/policies'
+import { netLobby } from './politics'
 import { annualizedProfit, valuationOf } from './companies'
 import { sectorMultiple } from './market'
 import { referencePrice, stakeOf, totalShares } from './ownership'
@@ -918,6 +920,220 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         company.directives.minMargin = profile.minMargin
 
         log.push(entry('info', `${profile.name} assume o comando de ${company.name}.`))
+        return
+      }
+
+      case 'doar': {
+        const politician = draft.politics.politicians[action.politicianId]
+        if (!politician) {
+          log.push(entry('ruim', 'Político desconhecido.'))
+          return
+        }
+        if (action.amount <= 0) {
+          log.push(entry('ruim', 'Valor inválido.'))
+          return
+        }
+
+        // Doação de empresa é mais rastreável que doação pessoal — e prova é o
+        // que condena numa investigação.
+        const company = action.fromCompanyId ? draft.companies[action.fromCompanyId] : null
+        if (action.fromCompanyId && (!company || company.managedBy !== 'player')) {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (company) {
+          if (company.cash < action.amount) {
+            log.push(entry('ruim', 'A empresa não tem caixa para isso.'))
+            return
+          }
+          company.cash -= action.amount
+        } else {
+          if (availableCash(state) < action.amount) {
+            log.push(entry('ruim', 'Dinheiro insuficiente.'))
+            return
+          }
+          debit(draft, action.amount)
+        }
+
+        const gain = Math.min(
+          POLITICS.loyaltyMaxPerDonation,
+          (action.amount / POLITICS.donationUnit) ** POLITICS.loyaltyExponent,
+        )
+        politician.loyaltyToPlayer = Math.min(100, politician.loyaltyToPlayer + gain)
+        politician.donationsFromPlayer += action.amount
+
+        draft.politics.donations.push({
+          id: `don-${action.politicianId}-${draft.date.dayIndex}`,
+          donorId: 'player',
+          politicianId: action.politicianId,
+          amount: action.amount,
+          dayIndex: draft.date.dayIndex,
+          traceable: company !== null,
+        })
+        draft.player.notoriety = clamp(
+          draft.player.notoriety + (company ? POLITICS.notorietyPerDonation : 1),
+          0,
+          100,
+        )
+
+        log.push(entry('info', `Doação para ${politician.name}.`, -action.amount))
+        return
+      }
+
+      case 'fazerLobby': {
+        const policy = draft.politics.policies[action.policyId]
+        if (!policy || policy.status !== 'tramitando') {
+          log.push(entry('ruim', 'Não há votação em curso para essa política.'))
+          return
+        }
+        if (action.amount <= 0 || availableCash(state) < action.amount) {
+          log.push(entry('ruim', 'Dinheiro insuficiente.'))
+          return
+        }
+        debit(draft, action.amount)
+
+        draft.politics.lobbyEfforts.push({
+          id: `lob-${action.policyId}-${draft.date.dayIndex}-${draft.politics.lobbyEfforts.length}`,
+          policyId: action.policyId,
+          actorId: 'player',
+          amount: action.amount,
+          direction: action.direction,
+          dayIndex: draft.date.dayIndex,
+        })
+        draft.player.notoriety = clamp(draft.player.notoriety + 2, 0, 100)
+
+        const net = netLobby(draft, action.policyId)
+        log.push(
+          entry(
+            'info',
+            `Lobby ${action.direction > 0 ? 'a favor' : 'contra'} de ${policy.name}: saldo de ${(net * 100).toFixed(1)} pontos.`,
+            -action.amount,
+          ),
+        )
+        return
+      }
+
+      case 'proporPolitica': {
+        const definition = findPolicyDef(action.policyId)
+        if (!definition || draft.politics.policies[action.policyId]) {
+          log.push(entry('ruim', 'Política indisponível.'))
+          return
+        }
+        // Propor exige cargo: quem não está na casa não apresenta projeto.
+        if (!player.office) {
+          log.push(entry('ruim', 'Só quem ocupa cargo eletivo propõe política.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        player.blocksUsedToday += 1
+
+        const sponsor = draft.politics.politicianOrder[0] ?? 'moraes'
+        draft.politics.policies[action.policyId] = {
+          id: definition.id,
+          name: definition.name,
+          effects: definition.effects,
+          sponsorId: sponsor,
+          status: 'tramitando',
+          supportPct: definition.baseSupport,
+          proposedDayIndex: draft.date.dayIndex,
+          voteDayIndex: draft.date.dayIndex + definition.debateDays,
+          beneficiaryIndustryIds: definition.beneficiaryIndustryIds,
+        }
+        draft.politics.policyOrder.push(definition.id)
+        log.push(entry('info', `Você apresentou ${definition.name}.`))
+        return
+      }
+
+      case 'contratarAdvogado': {
+        const investigation = draft.politics.investigations.find(
+          (item) => item.id === action.investigationId && item.status === 'aberta',
+        )
+        if (!investigation) {
+          log.push(entry('ruim', 'Não há investigação aberta com esse número.'))
+          return
+        }
+        if (action.spend <= 0 || availableCash(state) < action.spend) {
+          log.push(entry('ruim', 'Dinheiro insuficiente.'))
+          return
+        }
+        debit(draft, action.spend)
+        investigation.lawyerSpend += action.spend
+        // Advogado caro apaga prova — é o que o §5.7 chama de mitigação.
+        const erased = (action.spend / 1_000_000) * POLITICS.evidencePerMillionLawyer
+        investigation.evidence = Math.max(0, investigation.evidence - erased)
+        log.push(
+          entry('info', `Defesa contratada: ${erased.toFixed(1)} de prova neutralizada.`, -action.spend),
+        )
+        return
+      }
+
+      case 'candidatarCargo': {
+        const requirement = POLITICS.officeRequirements[action.office]
+        if (!requirement) {
+          log.push(entry('ruim', 'Cargo desconhecido.'))
+          return
+        }
+        const cost = nominal(draft.macro, requirement.campaign)
+        if (action.campaignSpend < cost) {
+          log.push(entry('ruim', `A campanha custa ao menos ${Math.round(cost)}.`))
+          return
+        }
+        if (availableCash(state) < action.campaignSpend) {
+          log.push(entry('ruim', 'Dinheiro insuficiente para a campanha.'))
+          return
+        }
+        if (player.skills.charisma < requirement.charisma) {
+          log.push(
+            entry('ruim', `Carisma ${Math.floor(player.skills.charisma)}/${requirement.charisma}.`),
+          )
+          return
+        }
+        if (player.publicReputation < requirement.reputation) {
+          log.push(entry('ruim', 'Sua reputação pública não sustenta a candidatura.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        player.blocksUsedToday += 1
+        debit(draft, action.campaignSpend)
+
+        // Quanto mais se gasta acima do mínimo, maior a chance — mas notoriedade
+        // e reputação pesam junto.
+        const overspend = action.campaignSpend / cost
+        const odds = clamp(
+          0.15 + Math.log10(overspend) * 0.35 + player.publicReputation / 250 - player.notoriety / 300,
+          0.03,
+          0.9,
+        )
+        if (!chance(draft.rng, odds)) {
+          log.push(entry('ruim', `Você perdeu a eleição para ${action.office}.`, -action.campaignSpend))
+          return
+        }
+
+        player.office = action.office
+        if (!draft.meta.officesHeld.includes(action.office)) {
+          draft.meta.officesHeld.push(action.office)
+        }
+        player.publicReputation = clamp(player.publicReputation + 10, -100, 100)
+        draft.news.headlines.push({
+          id: `hl-eleito-${draft.date.dayIndex}`,
+          outletId: 'portal',
+          dayIndex: draft.date.dayIndex,
+          text: `${player.name} é eleito ${action.office}`,
+          subject: { kind: 'player', id: 'player' },
+          sentiment: 0.4,
+          isRumor: false,
+          accuracy: 1,
+          isTrue: true,
+          planted: false,
+          eventId: null,
+        })
+        log.push(entry('bom', `Você foi eleito ${action.office}.`, -action.campaignSpend))
         return
       }
 

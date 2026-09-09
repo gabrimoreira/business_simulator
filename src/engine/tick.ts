@@ -26,14 +26,12 @@ import { stepAi } from './agents'
 import { stepCompanies } from './companies'
 import { stepMarket } from './market'
 import { stepBanking } from './banking'
+import { stepPolitics } from './politics'
 import { buildPublicView } from './perception'
 import { stepPlayer } from './player'
 import { LOG_WINDOW_SIZE } from '../data/config'
 
 /* eslint-disable @typescript-eslint/no-unused-vars -- passos ainda vazios */
-
-/** Passo 8 — aprovação, tramitação, eleições. Fase 7. */
-function stepPolitics(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]): void {}
 
 /* eslint-enable @typescript-eslint/no-unused-vars */
 

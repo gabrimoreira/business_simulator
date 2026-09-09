@@ -7,7 +7,7 @@
  */
 
 /** Versão do formato de save. Incrementar exige uma migration (§3.5). */
-export const SAVE_VERSION = 8
+export const SAVE_VERSION = 9
 
 // --- Tempo (GAME_DESIGN §3.1) ----------------------------------------------
 
@@ -596,4 +596,76 @@ export const TYCOONS = {
    * 8%. Um predador não precisa de pechincha, precisa de alvo tomável.
    */
   cheapThreshold: 1.25,
+} as const
+
+// --- Política (spec §5.7) ---------------------------------------------------
+
+export const POLITICS = {
+  /** Eleição federal a cada 4 anos, em outubro. */
+  electionIntervalDays: 1460,
+  electionMonth: 10,
+
+  /** Peso de cada componente no resultado da eleição. */
+  approvalWeight: 0.45,
+  donationWeight: 0.15,
+  mediaWeight: 0.2,
+  economyWeight: 0.2,
+  resultNoise: 0.06,
+
+  /** Doação: R$ 100 mil é a unidade de lealdade. */
+  donationUnit: 100_000,
+  loyaltyExponent: 0.7,
+  loyaltyMaxPerDonation: 25,
+  loyaltyDecayPerDay: 0.05,
+
+  /** Lobby: R$ 500 mil move 1 ponto percentual, com retorno decrescente. */
+  lobbyUnit: 500_000,
+  lobbyExponent: 0.75,
+  /** Teto de deslocamento de apoio por rodada de lobby. */
+  lobbyMaxShift: 0.25,
+
+  /** Tramitação: deriva diária do apoio em direção à posição média da casa. */
+  supportDrift: 0.002,
+  /** Apoio necessário na votação. */
+  approvalThreshold: 0.5,
+
+  /** Projeto rejeitado pode voltar depois deste prazo. */
+  reproposalDelayDays: 730,
+
+  /** Político leal propõe política alinhada a cada tantos dias. */
+  proposalIntervalDays: 365,
+  loyaltyToPropose: 30,
+
+  /**
+   * Notoriedade. Ela **decai** e só vira problema com prova: uma aquisição
+   * hostil chama atenção, mas não é crime — quem condena é a prova rastreável.
+   */
+  notorietyDecayPerDay: 0.04,
+  investigationThreshold: 60,
+  investigationDeadlineDays: 180,
+  /** P(condenação) = provas / (provas + isto). */
+  evidenceDivisor: 8,
+  /** Provas por ato rastreável. */
+  evidenceDonation: 1.2,
+  evidencePlantedStory: 1,
+  evidenceMassLayoff: 0.8,
+  evidenceTailoredPolicy: 2.5,
+  /** Advogado: quanto R$ 1 milhão apaga de prova. */
+  evidencePerMillionLawyer: 0.8,
+
+  /** Condenação: multa, bloqueio e prisão. */
+  convictionFineRatio: 0.25,
+  convictionPrisonDays: 180,
+
+  /** Carreira política do jogador. */
+  officeRequirements: {
+    vereador: { charisma: 35, reputation: 0, campaign: 50_000 },
+    deputado: { charisma: 55, reputation: 10, campaign: 400_000 },
+    senador: { charisma: 70, reputation: 25, campaign: 2_000_000 },
+    presidente: { charisma: 85, reputation: 45, campaign: 20_000_000 },
+  } as Record<string, { charisma: number; reputation: number; campaign: number }>,
+
+  /** Notoriedade cobrada quando uma política aprovada beneficia sua empresa. */
+  notorietyPerTailoredPolicy: 15,
+  notorietyPerDonation: 3,
 } as const
