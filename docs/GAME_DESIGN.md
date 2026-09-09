@@ -194,15 +194,19 @@ fases. Onde a aritmética de projeto e o runner discordam, quem manda é o runne
 | `passive` — só trabalha | R$ 1–2 M | teto salarial sem diploma + eventos de vida |
 | `investor` — trabalha, estuda, investe | R$ 50–150 M | IR 15%, corretagem, drawdown de recessão |
 | `entrepreneur` — funda e opera | R$ 1–5 B | capital de expansão, moral, guerra de preços da IA |
-| `tycoon` — alavanca, adquire, manipula | R$ 1,5–5 B † | antitruste, `notoriety`, tycoons rivais |
+| `tycoon` — alavanca, adquire, manipula | R$ 1,5–5 B | antitruste, `notoriety`, tycoons rivais |
+| `raider` — compra hostil | R$ 20–50 M | float recomprado pelo conselho |
 
-† **A faixa da `tycoon` é provisória e não deve ser levada a sério ainda.** A
-estratégia do runner com esse nome não adquire, não compra jornal e não financia
-político: ela é o `entrepreneur` com uma carteira de ações e um diploma a mais.
-Medida em três seeds, alterna com ele — R$ 1,48/1,57/5,02 bi contra
-R$ 1,19/3,06/4,78 bi — o que é o esperado de duas estratégias que fazem a mesma
-coisa. Enquanto ela não exercitar aquisição, mídia e política, essa linha mede
-ruído, não desenho.
+**A `tycoon` deixou de medir ruído.** Ela agora compra o veículo de maior alcance
+que couber no caixa, pauta contra o líder do próprio setor e concorre a cargo
+quando carisma, reputação e caixa alcançam. Medida: R$ 1,76 bi (seed 42) e
+R$ 2,72 bi (seed 7), contra R$ 1,19 bi e R$ 3,06 bi do `entrepreneur` — ainda
+alternando, mas agora porque são estratégias diferentes disputando, e não porque
+eram a mesma coisa.
+
+**A `raider` entrou na tabela, e o número dela é a descoberta mais interessante
+desta rodada.** Ela termina em R$ 20–30 M reais e **nunca fecha controle de
+nada**. Não é bug: é o conselho funcionando. Ver o §7.
 
 A coluna "1º milhão" saiu da tabela. Ela media a travessia de um limiar fixo em
 um jogo cuja inflação corre por 47 anos, então dizia coisas diferentes conforme o
@@ -1096,9 +1100,48 @@ offline, não só para a simulação. É a terceira vez que este projeto encontr
 mesma família de erro — a primeira foi a ordem de débito das contas na Fase 8 —
 e o padrão é sempre o mesmo: **um caminho de dinheiro que enxerga só um bolso.**
 
-**Pendência conhecida:** a `raider` continua sendo um `investor` com outro nome,
-e a `tycoon` é um `entrepreneur` com carteira. Enquanto forem, o checklist que as
-inclui mede a mesma vida duas vezes, e a faixa da `tycoon` no §2.1 é ruído.
+### A `raider` e o que ela provou
+
+As duas estratégias que eram cópias ganharam corpo assim que aquisição, mídia e
+política passaram a existir no motor. A `tycoon` compra jornal, pauta contra o
+líder do próprio setor e concorre a cargo. A `raider` acumula posição em bolsa e
+lança oferta pública.
+
+**A `raider` é o primeiro teste de sistema da defesa da IA**, e passou de um jeito
+que nenhum teste unitário teria mostrado:
+
+```
+dia   50  posição 4,46%   caixa R$ 2,81 bi
+dia   80  posição 5,35%   caixa R$ 2,36 bi   ← divulgação obrigatória dispara
+dia  110  posição 5,35%   caixa R$ 2,36 bi
+...
+dia 1820  posição 5,35%   caixa R$ 1,30 bi   ← catorze anos parada
+```
+
+Ela cruzou os 5%, a divulgação disparou, **o conselho recomprou o float** e o
+assalto morreu por falta de papel — com bilhões em caixa. A defesa que
+`agents.ts` executa desde a Fase 6b funcionou contra um atacante sistemático, e
+até esta rodada nada no projeto verificava isso.
+
+O que faltava era a estratégia saber **escalar**: quando o mercado seca, quem
+compra hostil passa por cima do conselho e oferta direto ao acionista. Com isso,
+duas OPAs lançadas e a posição saindo de 5,35% para 11%.
+
+**E o número final dela é uma conclusão de desenho, não um defeito.** A `raider`
+termina os 47 anos com R$ 20–30 M reais e **nenhuma empresa controlada**. Não se
+assalta com salário: mesmo compondo por quarenta anos, um assalariado consegue
+*atacar* uma listada e não consegue *vencer* o conselho dela. Tomar empresa é
+para quem já tem empresa — o que é exatamente o que o `entrepreneur` mostra ao
+terminar mil vezes acima.
+
+Duas armadilhas no caminho, ambas do mesmo tipo que este documento já registrou:
+
+| O que estava errado | Sintoma | Correção |
+|---|---|---|
+| a `raider` guardava o caixa em caixa desde o dia 1 | sem poupar nem investir, 47 anos de salário viraram R$ 390 mil reais — **abaixo do `passive`** | só para de compor quando o menor alvo da bolsa já cabe no bolso |
+| teto de compra calculado sobre `sharesOutstanding` | `fillBuy` recusa a ordem inteira se pedir mais que o float — 97 recusas seguidas | teto sobre o **float**, que é o que existe para comprar |
+
+**Pendência conhecida:** nenhuma das seis estratégias é mais cópia de outra.
 
 ### O que a Fase 3 mediu, e o que ficou em aberto
 

@@ -7,12 +7,34 @@ import type { ActionBlockKind, GameAction, GameState } from '@/engine/types'
 import { JOBS } from '@/data/jobs'
 import { COURSES } from '@/data/courses'
 import { BANKS } from '@/data/banks'
-import { INDUSTRIES } from '@/data/industries'
+import { INDUSTRIES, findIndustry } from '@/data/industries'
 import { annualizedProfit, capitalNeededFor } from '@/engine/companies'
 import { jobEligibility } from '@/engine/player'
 import { nominal } from '@/engine/macro'
 import { fairValue } from '@/engine/market'
 import { portfolioValue } from '@/engine/selectors'
+import { stakeOf, totalShares } from '@/engine/ownership'
+import { valuationOf } from '@/engine/companies'
+import { sectorMultiple } from '@/engine/market'
+import { CONTROL, NEWS, POLITICS, TYCOONS } from '@/data/config'
+import type { PublicOffice } from '@/engine/types'
+
+/**
+ * Fatia do float que o assalto engole por vez.
+ *
+ * Um quinto: comprar o float inteiro de uma vez paga deslizamento de dois
+ * dígitos e acende o alarme do conselho no primeiro mês. Comprar devagar demais
+ * dá tempo de o conselho recomprar antes de a posição significar algo.
+ */
+const RAID_FLOAT_SHARE = 0.2
+
+/**
+ * Abaixo desta fração do capital em circulação, o mercado está seco.
+ *
+ * É o sinal de que o conselho recomprou o float e não adianta insistir em
+ * bolsa: a partir daqui só a oferta pública alcança o acionista.
+ */
+const RAID_FLOAT_FLOOR = 0.03
 import { monthlyIncome } from '@/engine/banking'
 
 /** Reserva de sobrevivência antes de gastar com matrícula: ~2 meses de custo. */
@@ -91,6 +113,21 @@ export interface Strategy {
   /** Funda empresa quando junta capital, e reinveste o lucro dela. */
   buildsCompany: string | null
   /**
+   * Ataca listadas: acumula posição, cruza a divulgação e lança OPA.
+   *
+   * É a única estratégia que exercita a **defesa da IA sob ataque sistemático**.
+   * Sem ela, `agents.ts:defend` — pílula, cavaleiro branco, recompra — só rodava
+   * quando um tycoon rival resolvia atacar sozinho, e nenhuma corrida verificava
+   * se o conselho reage a um comprador insistente.
+   */
+  raids: boolean
+  /**
+   * Compra jornal e concorre a cargo. Os verbos que o §2.1 usa para descrever a
+   * `tycoon` — "alavanca, adquire, manipula" — e que ela nunca exerceu, porque
+   * até agora não existiam no motor.
+   */
+  wieldsInfluence: boolean
+  /**
    * Completa o capital de fundação com crédito quando o salário não chega lá.
    * Sem isto, quem começa como atendente **nunca** funda: R$ 60 mil reais é
    * mais do que um cargo de entrada acumula antes da inflação comer a poupança.
@@ -121,6 +158,8 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     savesInBank: true,
     investsInStocks: false,
     buildsCompany: null,
+    raids: false,
+    wieldsInfluence: false,
     leverageToFound: false,
     undercut: null,
   },
@@ -132,6 +171,8 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     savesInBank: true,
     investsInStocks: true,
     buildsCompany: null,
+    raids: false,
+    wieldsInfluence: false,
     leverageToFound: false,
     undercut: null,
   },
@@ -147,6 +188,8 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     savesInBank: true,
     investsInStocks: false,
     buildsCompany: 'varejo',
+    raids: false,
+    wieldsInfluence: false,
     leverageToFound: false,
     undercut: null,
   },
@@ -176,6 +219,8 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     // Sem crédito ela não funda, pelo mesmo motivo que o `pricewar` não fundava:
     // R$ 50 mil reais de capital mínimo é mais do que um assalariado acumula
     // antes de a inflação comer a poupança.
+    raids: false,
+    wieldsInfluence: true,
     leverageToFound: true,
     undercut: null,
   },
@@ -196,6 +241,8 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     savesInBank: true,
     investsInStocks: false,
     buildsCompany: 'varejo',
+    raids: false,
+    wieldsInfluence: false,
     leverageToFound: true,
     undercut: 0.85,
   },
@@ -207,6 +254,8 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
     savesInBank: true,
     investsInStocks: true,
     buildsCompany: null,
+    raids: true,
+    wieldsInfluence: false,
     leverageToFound: false,
     undercut: null,
   },
@@ -214,6 +263,27 @@ const STRATEGIES: Record<StrategyId, Strategy> = {
 
 export function getStrategy(id: StrategyId): Strategy {
   return STRATEGIES[id]
+}
+
+/**
+ * Custo de fechar controle da listada mais barata da bolsa.
+ *
+ * É o preço de entrada no jogo de aquisição: abaixo disso não há alvo, e
+ * guardar caixa é só perder para a inflação.
+ */
+function cheapestTakeover(state: GameState): number {
+  let best = Infinity
+  for (const id of state.companyOrder) {
+    const company = state.companies[id]
+    if (!company?.stock || !company.isPublic || company.status !== 'ativa') continue
+    const cost =
+      CONTROL.controlStake *
+      totalShares(company) *
+      company.stock.price *
+      (1 + TYCOONS.tenderPremium)
+    if (cost < best) best = cost
+  }
+  return best
 }
 
 /**
@@ -362,6 +432,27 @@ export function decideActions(state: GameState, strategy: Strategy): GameAction[
       strategy.buildsCompany !== null &&
       nextCourse.cost > foundingCapitalFor(strategy.buildsCompany))
 
+  /**
+   * Quem assalta mantém o caixa **em caixa**.
+   *
+   * O bloco de aplicação varre tudo no dia 5 e o assalto acontece no dia 20:
+   * com R$ 3 bi de patrimônio, a `raider` chegava ao dia do ataque com o
+   * buffer de sobrevivência no bolso e o resto rendendo no banco. Comprou sete
+   * vezes em catorze anos e terminou sem posição. É a mesma armadilha da
+   * reserva de fundação, no outro bolso.
+   */
+  const raiding =
+    strategy.raids &&
+    // **Só para de compor quando já dá para atacar alguém.**
+    //
+    // Guardar o caixa desde o primeiro dia parecia coerente com a estratégia e
+    // era ruína: sem poupar nem investir, 47 anos de salário viraram R$ 390 mil
+    // reais — abaixo do `passive`, que não faz nada além de trabalhar. Não se
+    // assalta com salário; assalta-se com capital, e capital vem de compor
+    // primeiro. Enquanto o menor alvo da bolsa estiver fora de alcance, a
+    // `raider` joga como o `investor`.
+    cheapestTakeover(state) <= player.money + portfolioValue(state)
+
   const savingToFound =
     strategy.buildsCompany !== null &&
     readyToFound &&
@@ -376,7 +467,8 @@ export function decideActions(state: GameState, strategy: Strategy): GameAction[
     const buffer = savingToFound
       ? nominal(state.macro, SURVIVAL_BUFFER + foundingCapitalFor(strategy.buildsCompany ?? ''))
       : nominal(state.macro, SURVIVAL_BUFFER)
-    const surplus = player.money - buffer
+    // Assalto em curso: nada sai do caixa.
+    const surplus = raiding ? 0 : player.money - buffer
     if (surplus > 0) {
       const ranked = state.companyOrder
         .flatMap((id) => {
@@ -405,6 +497,160 @@ export function decideActions(state: GameState, strategy: Strategy): GameAction[
     }
   }
 
+  // --- assalto: acumular, divulgar, ofertar ---------------------------------
+  if (strategy.raids && state.date.dayIndex % 30 === 20) {
+    const buffer = nominal(state.macro, SURVIVAL_BUFFER)
+    const war = player.money - buffer
+
+    // Um alvo por vez: espalhar posição por vários papéis não fecha controle em
+    // nenhum, e é fechar controle que dá o prêmio.
+    const held = state.companyOrder
+      .map((id) => ({ id, company: state.companies[id] }))
+      .filter((item) => item.company?.isPublic && stakeOf(item.company, 'player') > 0)
+      .sort((a, b) => stakeOf(b.company!, 'player') - stakeOf(a.company!, 'player'))[0]
+
+    const target =
+      held ??
+      // Alvo novo: a mais barata **entre as que dá para tomar**.
+      //
+      // Só "mais barata" escolhia a maior empresa da bolsa, e 5,4% dela comeu
+      // R$ 3 bi de caixa sem chegar perto do controle. Um comprador hostil não
+      // persegue desconto, persegue **controle**: o alvo tem de caber no bolso
+      // até os 50%, senão o dinheiro vira posição minoritária cara.
+      state.companyOrder
+        .flatMap((id) => {
+          const company = state.companies[id]
+          if (!company?.stock || !company.isPublic || company.status !== 'ativa') return []
+          const fair = fairValue(state, company)
+          if (fair <= 0) return []
+          const takeover =
+            CONTROL.controlStake *
+            totalShares(company) *
+            company.stock.price *
+            (1 + TYCOONS.tenderPremium)
+          if (takeover > war) return []
+          return [{ id, company, ratio: company.stock.price / fair }]
+        })
+        .sort((a, b) => a.ratio - b.ratio)[0]
+
+    if (target?.company) {
+      const company = target.company
+      const stake = stakeOf(company, 'player')
+      const stock = company.stock!
+      const outstanding = totalShares(company)
+
+      const float = company.ownership.find((entry) => entry.holderId === 'float')?.shares ?? 0
+      // O mercado acabou: ou a posição já bloqueia, ou o conselho recomprou o
+      // float e não há mais o que comprar em bolsa.
+      //
+      // Medido: a `raider` chegava a 5,35%, a divulgação obrigatória disparava,
+      // o conselho recomprava o float e o assalto morria ali — catorze anos com
+      // R$ 2,4 bi parados e nenhuma oferta lançada. A defesa da IA funcionou; a
+      // estratégia é que não sabia escalar. Quem compra hostil, quando o
+      // mercado seca, passa por cima do conselho e oferta direto ao acionista.
+      const marketDry = float < outstanding * RAID_FLOAT_FLOOR
+
+      if (stake >= CONTROL.controlStake) {
+        // Controle fechado: some da mira e o próximo alvo entra no mês seguinte.
+      } else if ((stake >= CONTROL.blockingStake || marketDry) && war > 0) {
+        const sought = Math.ceil((CONTROL.controlStake - stake) * outstanding)
+        const cost = stock.price * (1 + TYCOONS.tenderPremium) * sought
+        const jaAberta = state.tenders.some(
+          (tender) => tender.companyId === company.id && tender.status === 'aberta',
+        )
+        if (!jaAberta && war >= cost) {
+          actions.push({
+            kind: 'lancarOpa',
+            companyId: company.id,
+            premium: TYCOONS.tenderPremium,
+            sharesSought: sought,
+          })
+        }
+      } else if (war > stock.price && !marketDry) {
+        // **O limite é o float, não o volume.** `fillBuy` recusa a ordem inteira
+        // se pedir mais ações do que há em circulação — não compra o que dá, dá
+        // erro. Com o teto calculado sobre `sharesOutstanding`, o assalto levou
+        // 97 recusas seguidas de "não há papéis suficientes" e terminou 14 anos
+        // sem posição nenhuma.
+        const byMoney = Math.floor(war / stock.price)
+        const byFloat = Math.floor(float * RAID_FLOAT_SHARE)
+        const shares = Math.min(byMoney, byFloat)
+        if (shares > 0) {
+          actions.push({ kind: 'comprarAcao', companyId: company.id, shares, limitPrice: null })
+        }
+      }
+    }
+  }
+
+  // --- influência: jornal e mandato ------------------------------------------
+  if (strategy.wieldsInfluence && state.date.dayIndex % 30 === 25) {
+    const owned = state.news.outletOrder.find(
+      (id) => state.news.outlets[id]?.ownerId === 'player',
+    )
+    if (!owned) {
+      // O maior alcance que couber no caixa. Alcance é o que multiplica o
+      // choque de preço da manchete; credibilidade se gasta, alcance não.
+      const best = state.news.outletOrder
+        .flatMap((id) => {
+          const outlet = state.news.outlets[id]
+          if (!outlet || outlet.ownerId !== null) return []
+          const listed = outlet.companyId ? state.companies[outlet.companyId] : null
+          const industry = listed ? findIndustry(listed.industryId) : null
+          const floor = nominal(state.macro, outlet.reach * NEWS.outletPricePerReach)
+          const price =
+            listed && industry
+              ? Math.max(
+                  floor,
+                  valuationOf(listed, sectorMultiple(industry.multipleBase, state.macro.selic)),
+                )
+              : floor
+          return [{ id, outlet, price }]
+        })
+        .filter((item) => item.price <= player.money - nominal(state.macro, SURVIVAL_BUFFER))
+        .sort((a, b) => b.outlet.reach - a.outlet.reach)[0]
+      if (best) actions.push({ kind: 'comprarVeiculo', outletId: best.id })
+    } else {
+      // Com jornal na mão, ataca o líder do próprio setor: derrubar a percepção
+      // do concorrente é o que faz o acionista dele aceitar uma oferta depois.
+      const mine = state.companyOrder
+        .map((id) => state.companies[id])
+        .find((company) => company?.managedBy === 'player')
+      const rival = mine
+        ? state.companyOrder
+            .map((id) => state.companies[id])
+            .filter((c) => c && c.id !== mine.id && c.industryId === mine.industryId)
+            .sort((a, b) => b!.marketShare - a!.marketShare)[0]
+        : undefined
+      if (rival) {
+        actions.push({
+          kind: 'definirPauta',
+          outletId: owned,
+          subject: { kind: 'company', id: rival.id },
+          targetSentiment: -1,
+        })
+      }
+    }
+
+    // Mandato: concorre ao maior cargo que carisma, reputação e caixa alcançam.
+    if (!player.office) {
+      const affordable = Object.entries(POLITICS.officeRequirements)
+        .filter(
+          ([, req]) =>
+            player.skills.charisma >= req.charisma &&
+            player.publicReputation >= req.reputation &&
+            player.money >= nominal(state.macro, req.campaign + SURVIVAL_BUFFER),
+        )
+        .sort((a, b) => b[1].campaign - a[1].campaign)[0]
+      if (affordable) {
+        actions.push({
+          kind: 'candidatarCargo',
+          office: affordable[0] as PublicOffice,
+          campaignSpend: nominal(state.macro, affordable[1].campaign),
+        })
+      }
+    }
+  }
+
   // Aplica o excedente que sobrar. Escolhe o melhor rendimento entre os bancos
   // em que o score dá acesso — é a decisão que o jogador toma na aba Mundo.
   // Quem está juntando para fundar não deposita: o depósito do dia 5 devolvia
@@ -420,7 +666,8 @@ export function decideActions(state: GameState, strategy: Strategy): GameAction[
     const buffer = savingToFound
       ? nominal(state.macro, SURVIVAL_BUFFER + foundingCapitalFor(strategy.buildsCompany ?? ''))
       : nominal(state.macro, SURVIVAL_BUFFER)
-    const surplus = player.money - buffer
+    // Assalto em curso: nada sai do caixa.
+    const surplus = raiding ? 0 : player.money - buffer
     if (surplus > 0) {
       const bank = [...BANKS]
         .filter((item) => player.creditScore >= item.minScore)

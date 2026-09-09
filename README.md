@@ -73,8 +73,9 @@ própria.
 `default` do `applyAction` — com controle negativo, para o próprio teste não
 passar por engano.
 
-### Balanceamento em aberto
+### Balanceamento
 
-`tycoon` e `raider`, no runner, ainda são cópias de `entrepreneur` e `investor`:
-não adquirem, não compram jornal, não financiam político. Enquanto forem, a faixa
-da `tycoon` no `GAME_DESIGN §2.1` mede ruído, e está marcado lá.
+As seis estratégias do runner são distintas: nenhuma é cópia de outra. A `raider`
+acumula posição e lança oferta hostil — e é o único teste de sistema da defesa da
+IA, que reage recomprando o float. As faixas medidas estão no
+`GAME_DESIGN §2.1`, e o §7 registra cada ajuste com o sintoma que o motivou.
