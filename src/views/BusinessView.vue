@@ -60,7 +60,6 @@ const profiles = computed(() => Object.values(game.state?.ai.profiles ?? {}))
 function appoint(companyId: string, profileId: ArchetypeId): void {
   game.dispatch({ kind: 'nomearCeo', companyId, profileId })
   delegating.value = null
-  navigator.vibrate?.(20)
 }
 
 // --- fundação --------------------------------------------------------------
@@ -84,7 +83,6 @@ function found(): void {
   name.value = ''
   capital.value = null
   founding.value = false
-  navigator.vibrate?.(20)
 }
 
 // --- gestão ----------------------------------------------------------------
@@ -115,7 +113,6 @@ function openCapital(companyId: string, valuation: number): void {
     floatPct: 0.3,
     pricePerShare: Math.max(0.5, valuation / shares),
   })
-  navigator.vibrate?.(30)
 }
 
 function hire(companyId: string, count: number): void {

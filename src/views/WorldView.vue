@@ -31,7 +31,6 @@ function bankName(id: string): string {
 
 function payoff(loanId: string, amount: number): void {
   game.dispatch({ kind: 'pagarEmprestimo', loanId, amount })
-  navigator.vibrate?.(12)
 }
 </script>
 

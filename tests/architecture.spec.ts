@@ -113,6 +113,16 @@ describe('arquitetura da engine', () => {
     }
   })
 
+  it('src/ui/cues.ts é dado puro: sem Web Audio, sem DOM', () => {
+    // O vocabulário sonoro está separado do tocador para poder ser testado em
+    // Node sem mock. Se um `AudioContext` vazar para cá, o teste de som deixa
+    // de rodar e a escolha da cue volta a ser regra sem cobertura.
+    const source = stripComments(readFileSync(join(ROOT, 'src', 'ui', 'cues.ts'), 'utf8'))
+    for (const forbidden of ['AudioContext', 'window', 'document', 'navigator', 'localStorage']) {
+      expect(source.includes(forbidden), `cues.ts usa ${forbidden}`).toBe(false)
+    }
+  })
+
   it('engine/types.ts não importa nada', () => {
     const source = stripComments(readFileSync(join(ENGINE_DIR, 'types.ts'), 'utf8'))
     expect(importsOf(source)).toEqual([])

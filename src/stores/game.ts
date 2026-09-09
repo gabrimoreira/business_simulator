@@ -14,6 +14,7 @@ import { clearSave, loadMeta, loadState, saveMeta, saveState } from '@/persisten
 import { createAutosave, type Autosave } from '@/persistence/autosave'
 import { cloneState, toJson } from '@/persistence/serialize'
 import { migrate } from '@/persistence/migrations'
+import { play, playForLog } from '@/ui/sound'
 
 export type LoadStatus = 'inicial' | 'carregando' | 'pronto' | 'erro'
 
@@ -73,12 +74,17 @@ export const useGameStore = defineStore('game', () => {
       awayTitle.value = action.days >= 30 ? 'Um mês depois' : 'Uma semana depois'
       awayLog.value = result.log
       commit(stampTick(result.state))
+      play('tempo')
       return
     }
 
     const result = applyAction(current, action)
     dayLog.value = [...result.log, ...dayLog.value].slice(0, 40)
     commit(result.state)
+    // O retorno sai daqui, e não de cada botão, porque só o log sabe se a ação
+    // foi aceita: `applyAction` recusa devolvendo o estado intacto. Espalhado
+    // pelas telas, o feedback confirmava recusa como se fosse sucesso.
+    playForLog(result.log)
   }
 
   /**

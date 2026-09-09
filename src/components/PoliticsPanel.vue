@@ -49,14 +49,12 @@ function lobby(policyId: string, direction: 1 | -1): void {
   if (!amount.value || amount.value <= 0) return
   game.dispatch({ kind: 'fazerLobby', policyId, amount: amount.value, direction })
   amount.value = null
-  navigator.vibrate?.(14)
 }
 
 function donate(politicianId: string): void {
   if (!amount.value || amount.value <= 0) return
   game.dispatch({ kind: 'doar', politicianId, amount: amount.value, fromCompanyId: null })
   amount.value = null
-  navigator.vibrate?.(14)
 }
 
 function defend(): void {

@@ -7,12 +7,20 @@ import { JOBS, findJob } from '@/data/jobs'
 import { COURSES, findCourse } from '@/data/courses'
 import { jobEligibility } from '@/engine/player'
 import { CAREER } from '@/data/config'
+import { isMuted, toggleMuted } from '@/ui/sound'
 
 const game = useGameStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 const message = ref<string | null>(null)
 
 const player = computed(() => game.state?.player ?? null)
+
+// Preferência do aparelho, não da partida: mora no localStorage e não viaja no
+// save exportado. O `ref` existe só para a tela reagir ao clique.
+const muted = ref(isMuted())
+function onToggleSound(): void {
+  muted.value = toggleMuted()
+}
 
 const job = computed(() => (player.value?.currentJobId ? findJob(player.value.currentJobId) : null))
 
@@ -239,6 +247,20 @@ async function deleteGame(): Promise<void> {
           </div>
         </div>
       </div>
+    </section>
+
+    <section class="px-4 pt-4">
+      <h2 class="pb-2 text-sm font-medium text-muted">Preferências</h2>
+      <button
+        class="flex min-h-[48px] w-full items-center justify-between rounded-xl border border-line bg-surface px-4 text-sm font-medium"
+        @click="onToggleSound"
+      >
+        <span>Som</span>
+        <span :class="muted ? 'text-muted' : 'text-accent'">{{ muted ? 'desligado' : 'ligado' }}</span>
+      </button>
+      <p class="px-1 pt-1 text-xs text-muted">
+        A vibração continua nos dois casos — é o retorno que funciona no silencioso.
+      </p>
     </section>
 
     <section class="px-4 pt-4">

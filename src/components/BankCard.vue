@@ -30,7 +30,6 @@ function run(action: 'depositar' | 'sacar' | 'aplicar' | 'resgatar'): void {
   if (!value || value <= 0) return
   game.dispatch({ kind: action, bankId: props.bank.id, amount: value })
   amount.value = null
-  navigator.vibrate?.(12)
 }
 
 function borrow(): void {
@@ -44,7 +43,6 @@ function borrow(): void {
     termDays: term.value,
   })
   amount.value = null
-  navigator.vibrate?.(20)
 }
 </script>
 

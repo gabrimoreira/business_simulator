@@ -7,6 +7,7 @@ import EndScreen from '@/components/EndScreen.vue'
 import NewGamePanel from '@/components/NewGamePanel.vue'
 import StatusBar from '@/components/StatusBar.vue'
 import { useGameStore } from '@/stores/game'
+import { installUnlockOnFirstGesture, play } from '@/ui/sound'
 
 const game = useGameStore()
 
@@ -23,9 +24,22 @@ const endingLabel = computed(() => {
 })
 
 onMounted(async () => {
+  // Antes do load: o áudio precisa estar armado quando o primeiro toque vier,
+  // e o navegador só libera `AudioContext` dentro de um gesto do usuário.
+  installUnlockOnFirstGesture()
   await game.load()
   if (game.hasGame) game.startTicker()
 })
+
+// O arpejo de fecho, uma vez só. Fica aqui e não no `EndScreen` porque a
+// partida também pode encerrar durante um avanço de tempo, com a tela ainda
+// montada — e um `onMounted` no componente perderia esse caso.
+watch(
+  () => game.state?.meta.ending ?? null,
+  (ending, before) => {
+    if (ending && !before) play('fim')
+  },
+)
 
 // A partida pode nascer depois do load (tela de nova partida).
 watch(

@@ -77,7 +77,6 @@ function launchTender(): void {
     premium: premium.value / 100,
     sharesSought: cost.shares,
   })
-  navigator.vibrate?.(30)
 }
 
 function trade(kind: 'comprarAcao' | 'venderAcao'): void {
@@ -91,7 +90,6 @@ function trade(kind: 'comprarAcao' | 'venderAcao'): void {
   })
   shares.value = null
   limit.value = null
-  navigator.vibrate?.(18)
 }
 </script>
 

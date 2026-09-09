@@ -908,6 +908,50 @@ Resultado: 241 testes, 13 arquivos, **código 0**, sem erro não tratado.
 `dangerouslyIgnoreUnhandledErrors` teria escondido o sintoma junto com erro de
 verdade — não é o caminho.
 
+### Som
+
+Faltava do §9 da Fase 8; entrou agora. Três decisões que valem registro.
+
+**Nenhum som é arquivo.** Tudo sai de oscilador da Web Audio, sintetizado em
+tempo de execução: não há asset para precachear, o service worker não cresce, o
+PWA continua idêntico offline e o `dist` ficou nos mesmos 656 KB. Um pacote de
+seis efeitos em `.mp3` custaria mais que isso sozinho.
+
+**O retorno mora na store, não nos botões.** As doze chamadas de
+`navigator.vibrate` espalhadas pelas telas confirmavam **toda** ação com a mesma
+vibração — inclusive as recusadas, porque o botão não olha o retorno. Como
+`applyAction` recusa devolvendo o estado intacto e um `LogEntry` (CLAUDE.md §2),
+só o log sabe o que aconteceu. Agora `dispatch` toca a partir do log, e a
+severidade mais grave do lote escolhe a cue. Verificado no navegador: compra
+aceita toca `toque` (1 oscilador), compra sem caixa toca `perda` (2).
+
+**A escolha da cue é regra e tem teste; o tocador não.** `src/ui/cues.ts` é dado
+puro, sem `AudioContext` e sem DOM, então roda no vitest em Node sem mock — e um
+teste de arquitetura impede que isso apodreça. `src/ui/sound.ts` fica com a
+parte que só o navegador exercita: contexto preguiçoso destravado no primeiro
+gesto (iOS e Android recusam áudio fora de um toque), e tudo embrulhado em
+`try/catch`, porque som é enfeite e enfeite que quebra a ação do jogador é bug.
+
+O mudo é preferência do **aparelho**: vai para o `localStorage`, que o §6 permite
+exatamente para isto, e não para o save — exportar uma partida não deve levar
+junto o "silencia isso aqui" de um celular. A vibração continua nos dois casos:
+é o retorno que funciona com o telefone no silencioso.
+
+| Cue | Quando | Forma |
+|---|---|---|
+| `toque` | ação aceita, sem nada a relatar | blip de 45ms |
+| `ganho` | log `bom` | terça maior subindo |
+| `perda` | log `ruim` — inclui recusa | a mesma terça, descendo |
+| `alerta` | log `critico` | três pulsos graves, o único que interrompe |
+| `tempo` | avanço de tempo | quarta subindo, mais grave |
+| `fim` | partida encerrada | arpejo de quatro notas, uma vez |
+
+Orçamento de duração: cue de ação some em até 400ms, para não sobrar até o
+toque seguinte; só o arpejo de fecho passa disso (820ms), e ele não disputa com
+gesto nenhum. Os dois limites têm teste.
+
+**O que não foi feito:** animações, o terceiro item do §9 da Fase 8.
+
 ### O que a Fase 3 mediu, e o que ficou em aberto
 
 Aos 65 anos, em três seeds:

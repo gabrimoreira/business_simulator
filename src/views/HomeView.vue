@@ -99,12 +99,10 @@ const premium = computed(() => {
 
 function act(action: GameAction): void {
   game.dispatch(action)
-  navigator.vibrate?.(12)
 }
 
 function advance(days: number): void {
   game.dispatch({ kind: 'avancarTempo', days })
-  navigator.vibrate?.(24)
 }
 </script>
 
