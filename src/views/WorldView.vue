@@ -7,6 +7,7 @@ import { useGameStore } from '@/stores/game'
 import { formatMoney, formatMoneyCompact, formatPercent } from '@/lib/format'
 import { BANKS, findBank } from '@/data/banks'
 import { ASSETS } from '@/data/assets'
+import MediaPanel from '@/components/MediaPanel.vue'
 
 const game = useGameStore()
 const macro = computed(() => game.state?.macro ?? null)
@@ -196,6 +197,8 @@ function payoff(loanId: string, amount: number): void {
         </button>
       </div>
     </section>
+
+    <MediaPanel />
 
     <section class="px-4 pt-4">
       <div class="flex items-baseline justify-between pb-2">

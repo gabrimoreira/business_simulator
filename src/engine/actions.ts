@@ -1743,10 +1743,19 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         // alavanca mais forte do jogo sobre a percepção pública.
         const listed = outlet.companyId ? draft.companies[outlet.companyId] : null
         const industry = listed ? findIndustry(listed.industryId) : null
+        // **O alcance é piso, sempre.** `valuationOf` grampeia em zero quando a
+        // dívida engole o múltiplo, e havia veículo listado com dívida de
+        // R$ 756 mi saindo por R$ 0,00: o jogador levava um megafone de alcance
+        // 95 de graça. Quem compra jornal está comprando influência, e
+        // influência não fica de graça porque o balanço está ruim.
+        const floor = nominal(draft.macro, outlet.reach * NEWS.outletPricePerReach)
         const price =
           listed && industry
-            ? valuationOf(listed, sectorMultiple(industry.multipleBase, draft.macro.selic))
-            : nominal(draft.macro, outlet.reach * NEWS.outletPricePerReach)
+            ? Math.max(
+                floor,
+                valuationOf(listed, sectorMultiple(industry.multipleBase, draft.macro.selic)),
+              )
+            : floor
         if (availableCash(state) < price) {
           log.push(entry('ruim', `Comprar ${outlet.name} custa ${Math.round(price)}.`))
           return

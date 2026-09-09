@@ -172,6 +172,15 @@ describe('imprensa comprada', () => {
     expect(denovo.log.some((e) => e.text.includes('pauta anterior'))).toBe(true)
   })
 
+  it('nenhum veículo sai de graça, por pior que seja o balanço', () => {
+    // `canal-sete` nasce com R$ 756 mi de dívida e `valuationOf` grampeia em
+    // zero: sem piso, o jogador levava um megafone de alcance 95 sem pagar nada.
+    const state = fresh()
+    const pobre = applyAction(state, { kind: 'comprarVeiculo', outletId: 'portal' })
+    expect(pobre.state.news.outlets['portal']!.ownerId).not.toBe('player')
+    expect(pobre.log.some((e) => e.text.includes('custa'))).toBe(true)
+  })
+
   it('quem não é dono não define pauta', () => {
     const result = applyAction(funded(fresh()), {
       kind: 'definirPauta',

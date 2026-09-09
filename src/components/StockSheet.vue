@@ -6,7 +6,10 @@ import { formatMoney, formatPercent } from '@/lib/format'
 import { fairValue, slippageFor, brokerage } from '@/engine/market'
 import { CONTROL_LABEL, controlLevelFor, referencePrice, stakeOf } from '@/engine/ownership'
 import { findIndustry } from '@/data/industries'
-import { CONTROL } from '@/data/config'
+import { CONTROL, MARKET } from '@/data/config'
+
+/** Fração do caixa que o botão de um toque oferece como garantia. */
+const COLLATERAL_SHARE = 0.2
 
 const props = defineProps<{ companyId: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -90,6 +93,40 @@ function trade(kind: 'comprarAcao' | 'venderAcao'): void {
   })
   shares.value = null
   limit.value = null
+}
+
+// --- alavancagem ----------------------------------------------------------
+
+const margin = computed(
+  () => game.state?.market.margin ?? { enabled: false, collateral: 0, borrowed: 0, maintenanceRatio: 0 },
+)
+
+const shorted = computed(() => position.value?.shortShares ?? 0)
+
+/** Garantia sugerida: uma fração do caixa, nunca o caixa inteiro. */
+const collateralOffer = computed(() => (game.state?.player.money ?? 0) * COLLATERAL_SHARE)
+
+function enableMargin(): void {
+  if (collateralOffer.value <= 0) return
+  game.dispatch({ kind: 'habilitarMargem', collateral: collateralOffer.value })
+}
+
+function short(): void {
+  const quantity = shares.value
+  if (!quantity || quantity <= 0) return
+  game.dispatch({ kind: 'venderDescoberto', companyId: props.companyId, shares: Math.floor(quantity) })
+  shares.value = null
+}
+
+function cover(): void {
+  const quantity = shares.value
+  if (!quantity || quantity <= 0) return
+  game.dispatch({
+    kind: 'recomprarDescoberto',
+    companyId: props.companyId,
+    shares: Math.floor(quantity),
+  })
+  shares.value = null
 }
 </script>
 
@@ -234,6 +271,52 @@ function trade(kind: 'comprarAcao' | 'venderAcao'): void {
           Vender
         </button>
       </div>
+
+      <!-- Alavancagem. Fica atrás de um toque de propósito: perda a descoberto
+           é ilimitada, e não deve ficar do lado de comprar e vender. -->
+      <details class="mt-3">
+        <summary class="min-h-[44px] cursor-pointer list-none rounded-xl border border-line px-3 py-3 text-sm text-muted">
+          Operar vendido
+        </summary>
+
+        <div v-if="!margin.enabled" class="pt-2">
+          <p class="pb-2 text-[11px] text-muted">
+            Vender a descoberto exige garantia. O que você pode dever é
+            {{ MARKET.marginLeverage }}× a garantia — e a perda não tem teto: se o
+            preço sobe, a corretora recompra à força e a garantia paga.
+          </p>
+          <button
+            class="min-h-[44px] w-full rounded-xl border border-warn/50 text-sm font-medium text-warn"
+            @click="enableMargin"
+          >
+            Depositar garantia de {{ formatMoney(collateralOffer) }}
+          </button>
+        </div>
+
+        <div v-else class="pt-2">
+          <p class="tnum pb-2 text-[11px] text-muted">
+            Garantia {{ formatMoney(margin.collateral) }} · devendo
+            {{ formatMoney(margin.borrowed) }}
+            <span v-if="shorted > 0"> · vendido em {{ shorted }} ações</span>
+          </p>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              class="min-h-[48px] rounded-xl border border-down/50 text-sm font-semibold text-down disabled:opacity-30"
+              :disabled="!shares"
+              @click="short()"
+            >
+              Vender descoberto
+            </button>
+            <button
+              class="min-h-[48px] rounded-xl border border-line text-sm font-semibold disabled:opacity-30"
+              :disabled="!shares || shorted <= 0"
+              @click="cover()"
+            >
+              Recomprar
+            </button>
+          </div>
+        </div>
+      </details>
 
       <button class="mt-3 min-h-[44px] w-full rounded-xl text-sm text-muted" @click="emit('close')">
         Fechar

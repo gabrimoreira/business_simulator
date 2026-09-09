@@ -57,25 +57,21 @@ IA operacional com 9 arquétipos, participação e controle (OPA, IPO, fusão), 
 defensiva e tycoons rivais, política, ativos pessoais, ranking e New Game+, som e
 animações.
 
-### O que ainda não tem interface
+### Cobertura de ações
 
-Estes verbos existem no motor e têm teste, mas **não há botão** para eles:
+As 66 ações da união `GameAction` têm implementação no `applyAction`, salvo três
+exceções de propósito: `dormir` é automática na virada do dia (resolução C3, zero
+blocos), `iniciarPartida` passa pela tela de nova partida e `avancarTempo` é
+roteada para `runDays`, por contrato.
 
-| Área | Ações |
-|---|---|
-| Rotina | `definirRotina` |
-| Defesa | `pilulaDeVeneno`, `cavaleiroBranco`, `responderOpa` |
-| M&A | `fundir`, `entrarEmSetor`, `venderDivisao` |
-| Mídia | `comprarVeiculo`, `definirPauta` |
-| Política | `candidatarCargo`, `proporPolitica`, `votarPolitica` |
-| Operação | `pagarDividendos`, `recomprarAcoes`, `emprestimoEmpresarial`, `demitir`, `reduzirCapacidade`, `anunciarProduto` |
-| Bolsa | `venderDescoberto`, `recomprarDescoberto`, `habilitarMargem` |
+Pela interface, falta caminho para **uma**: `encerrarPartida` — desistir da
+partida antes da morte ou da aposentadoria. A tela de fim existe e é acionada
+pelos dois desfechos naturais; o que não há é o botão de encerrar por vontade
+própria.
 
-O **editor de rotina** é o mais urgente da lista. A rotina inicial é
-`trabalhar / lazer / trabalhar`, e o segundo `trabalhar` não rende nada além de
-desempenho — o salário é mensal. Como o avanço de tempo executa a rotina, o loop
-principal do jogo hoje roda com uma configuração subótima que o jogador não tem
-como corrigir.
+`tests/verbs.spec.ts` varre a união inteira e falha se qualquer ação cair no
+`default` do `applyAction` — com controle negativo, para o próprio teste não
+passar por engano.
 
 ### Balanceamento em aberto
 

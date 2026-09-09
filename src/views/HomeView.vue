@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import EmptyState from '@/components/EmptyState.vue'
 import HeadlineList from '@/components/HeadlineList.vue'
 import RoutineEditor from '@/components/RoutineEditor.vue'
+import TakeoverAlert from '@/components/TakeoverAlert.vue'
 import ScreenTitle from '@/components/ScreenTitle.vue'
 import { useGameStore } from '@/stores/game'
 import { formatMoney, formatMoneyCompact } from '@/lib/format'
@@ -115,6 +116,10 @@ function advance(days: number): void {
 <template>
   <div class="pb-6">
     <ScreenTitle title="Início" :subtitle="player ? `Olá, ${player.name}` : ''" />
+
+    <!-- Acima de tudo: oferta hostil tem prazo, e prazo que passa é decisão
+         tomada por omissão. -->
+    <TakeoverAlert />
 
     <section class="px-4 pt-3">
       <div class="rounded-2xl border border-line bg-surface p-4">

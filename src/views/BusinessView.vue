@@ -10,6 +10,15 @@ import { sectorMultiple } from '@/engine/market'
 import { INDUSTRIES, findIndustry } from '@/data/industries'
 import { CONTROL, OPERATIONS } from '@/data/config'
 import type { ArchetypeId } from '@/engine/types'
+import { stakeOf } from '@/engine/ownership'
+
+/** Prazo do crédito empresarial oferecido pelo botão: dez anos. */
+const BUSINESS_LOAN_TERM_DAYS = 3650
+/** Frações do caixa que cada botão de um toque compromete. */
+const BUYBACK_CASH_SHARE = 0.25
+const CAMPAIGN_CASH_SHARE = 0.1
+const SHRINK_SHARE = 0.2
+const DIVISION_SALE = 0.25
 
 const game = useGameStore()
 
@@ -121,6 +130,105 @@ function hire(companyId: string, count: number): void {
   if (!company || !industry || !game.state) return
   const salary = industry.outputPerEmployee * industry.payrollRatio * game.state.macro.priceLevel
   game.dispatch({ kind: 'contratar', companyId, count, salary })
+}
+
+// --- caixa da empresa -----------------------------------------------------
+
+/** Crédito empresarial: metade da receita menos a dívida (o motor confere). */
+function creditRoom(companyId: string): number {
+  const company = game.state?.companies[companyId]
+  if (!company) return 0
+  return Math.max(0, company.revenue * 0.5 - company.debt)
+}
+
+function borrow(companyId: string): void {
+  const amount = creditRoom(companyId)
+  if (amount <= 0) return
+  game.dispatch({
+    kind: 'emprestimoEmpresarial',
+    companyId,
+    bankId: 'meridiano',
+    amount,
+    termDays: BUSINESS_LOAN_TERM_DAYS,
+  })
+}
+
+function setPayout(companyId: string, ratio: number): void {
+  game.dispatch({ kind: 'pagarDividendos', companyId, ratio })
+}
+
+function buyBackShares(companyId: string): void {
+  const company = game.state?.companies[companyId]
+  if (!company) return
+  game.dispatch({ kind: 'recomprarAcoes', companyId, amount: company.cash * BUYBACK_CASH_SHARE })
+}
+
+function advertise(companyId: string): void {
+  const company = game.state?.companies[companyId]
+  if (!company) return
+  game.dispatch({ kind: 'anunciarProduto', companyId, spend: company.cash * CAMPAIGN_CASH_SHARE })
+}
+
+function shrink(companyId: string): void {
+  const company = game.state?.companies[companyId]
+  if (!company) return
+  game.dispatch({
+    kind: 'reduzirCapacidade',
+    companyId,
+    amount: company.capitalStock * SHRINK_SHARE,
+  })
+}
+
+function fireOne(companyId: string): void {
+  // O motor trata `demitir` como demissão de um; o id serve de registro.
+  game.dispatch({ kind: 'demitir', companyId, employeeId: `emp@${companyId}` })
+}
+
+// --- M&A ------------------------------------------------------------------
+
+/** Setores diferentes do atual, para diversificar. */
+function otherIndustries(companyId: string) {
+  const company = game.state?.companies[companyId]
+  return INDUSTRIES.filter((industry) => industry.id !== company?.industryId)
+}
+
+/** Capital que o setor exige por funcionário — o piso que o motor cobra. */
+function entryCost(industryId: string): number {
+  const industry = findIndustry(industryId)
+  return industry ? industry.outputPerEmployee / industry.capitalTurnover : 0
+}
+
+function enterSector(companyId: string, industryId: string): void {
+  game.dispatch({
+    kind: 'entrarEmSetor',
+    companyId,
+    industryId,
+    investment: entryCost(industryId),
+  })
+}
+
+function sellDivision(companyId: string): void {
+  game.dispatch({ kind: 'venderDivisao', companyId, fraction: DIVISION_SALE })
+}
+
+/** Alvos de fusão: mesma indústria e já sob controle do jogador. */
+function mergeTargets(companyId: string) {
+  const state = game.state
+  const acquirer = state?.companies[companyId]
+  if (!state || !acquirer) return []
+  return state.companyOrder
+    .map((id) => state.companies[id])
+    .filter(
+      (target) =>
+        target !== undefined &&
+        target.id !== companyId &&
+        target.industryId === acquirer.industryId &&
+        stakeOf(target, 'player') > CONTROL.controlStake,
+    )
+}
+
+function merge(acquirerId: string, targetId: string): void {
+  game.dispatch({ kind: 'fundir', acquirerId, targetId, cash: 0 })
 }
 </script>
 
@@ -264,12 +372,96 @@ function hire(companyId: string, count: number): void {
             Abrir capital
           </button>
           <button
+            class="min-h-[44px] rounded-xl border border-line text-sm text-muted"
+            @click="fireOne(item.company.id)"
+          >
+            Demitir 1
+          </button>
+          <button
+            class="min-h-[44px] rounded-xl border border-line text-sm text-muted"
+            @click="shrink(item.company.id)"
+          >
+            Encolher 20%
+          </button>
+          <button
             class="col-span-2 min-h-[44px] rounded-xl border border-line text-sm text-muted"
             @click="delegating = delegating === item.company.id ? null : item.company.id"
           >
             {{ delegating === item.company.id ? 'cancelar' : 'Nomear um CEO' }}
           </button>
         </div>
+
+        <!-- Caixa: crédito, dividendo, recompra e campanha. -->
+        <div class="grid grid-cols-2 gap-2 pt-2">
+          <button
+            class="min-h-[44px] rounded-xl border border-line px-2 text-xs leading-tight disabled:opacity-30"
+            :disabled="creditRoom(item.company.id) <= 0"
+            @click="borrow(item.company.id)"
+          >
+            Tomar crédito
+            <span class="tnum block text-muted">
+              {{ formatMoneyCompact(creditRoom(item.company.id)) }}
+            </span>
+          </button>
+          <button
+            class="min-h-[44px] rounded-xl border border-line px-2 text-xs leading-tight"
+            @click="advertise(item.company.id)"
+          >
+            Campanha
+            <span class="block text-muted">10% do caixa em marca</span>
+          </button>
+          <button
+            class="min-h-[44px] rounded-xl border border-line px-2 text-xs leading-tight"
+            @click="setPayout(item.company.id, item.company.directives.payoutRatio > 0 ? 0 : 0.3)"
+          >
+            Dividendos
+            <span class="block text-muted">
+              {{ Math.round(item.company.directives.payoutRatio * 100) }}% do lucro
+            </span>
+          </button>
+          <button
+            v-if="item.company.isPublic"
+            class="min-h-[44px] rounded-xl border border-line px-2 text-xs leading-tight"
+            @click="buyBackShares(item.company.id)"
+          >
+            Recomprar ações
+            <span class="block text-muted">25% do caixa</span>
+          </button>
+        </div>
+
+        <!-- M&A: diversificar, vender pedaço, incorporar controlada. -->
+        <details class="pt-2">
+          <summary class="min-h-[44px] cursor-pointer list-none rounded-xl border border-line px-3 py-3 text-sm text-muted">
+            Reorganizar
+          </summary>
+          <div class="flex flex-col gap-2 pt-2">
+            <button
+              class="min-h-[44px] rounded-xl border border-line px-3 text-left text-xs"
+              @click="sellDivision(item.company.id)"
+            >
+              Vender 25% da operação
+            </button>
+            <button
+              v-for="target in mergeTargets(item.company.id)"
+              :key="target!.id"
+              class="min-h-[44px] rounded-xl border border-line px-3 text-left text-xs"
+              @click="merge(item.company.id, target!.id)"
+            >
+              Incorporar {{ target!.name }}
+            </button>
+            <p class="px-1 text-[11px] text-muted">Entrar em outro setor</p>
+            <button
+              v-for="industry in otherIndustries(item.company.id)"
+              :key="industry.id"
+              class="flex min-h-[44px] items-center justify-between rounded-xl border border-line px-3 text-left text-xs disabled:opacity-30"
+              :disabled="item.company.cash < entryCost(industry.id)"
+              @click="enterSector(item.company.id, industry.id)"
+            >
+              <span>{{ industry.name }}</span>
+              <span class="tnum text-muted">{{ formatMoneyCompact(entryCost(industry.id)) }}</span>
+            </button>
+          </div>
+        </details>
 
         <div v-if="delegating === item.company.id" class="mt-2 rounded-xl border border-line p-3">
           <p class="pb-2 text-[11px] text-muted">
