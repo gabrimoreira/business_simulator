@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { RouterView } from 'vue-router'
 import AwayModal from '@/components/AwayModal.vue'
 import BottomNav from '@/components/BottomNav.vue'
@@ -8,6 +8,18 @@ import StatusBar from '@/components/StatusBar.vue'
 import { useGameStore } from '@/stores/game'
 
 const game = useGameStore()
+
+const ENDING_LABELS: Record<string, string> = {
+  morte: 'Você morreu',
+  aposentadoria: 'Você se aposentou',
+  falencia: 'Você faliu',
+  prisao: 'Você foi preso',
+}
+
+const endingLabel = computed(() => {
+  const ending = game.state?.meta.ending
+  return ending ? (ENDING_LABELS[ending] ?? 'Fim de jogo') : ''
+})
 
 onMounted(async () => {
   await game.load()
@@ -42,6 +54,15 @@ onUnmounted(() => game.stopTicker())
 
     <template v-else>
       <StatusBar />
+      <!-- Partida encerrada: o tick para de avançar, e sem este aviso a tela
+           continua oferecendo ações que não fazem nada. A tela de encerramento
+           com ranking e New Game+ é da Fase 8. -->
+      <div
+        v-if="game.state?.meta.ending"
+        class="border-b border-down/40 bg-down/10 px-4 py-2 text-center text-xs text-down"
+      >
+        {{ endingLabel }} — o tempo parou aqui. Apague a partida no Perfil para recomeçar.
+      </div>
       <main class="flex-1 overflow-y-auto overscroll-contain pb-2">
         <RouterView />
       </main>

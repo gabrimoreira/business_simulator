@@ -283,7 +283,9 @@ describe('imposto sobre ganho de capital', () => {
       shares: 20_000,
       limitPrice: null,
     }).state
-    state = { ...state, player: { ...state.player, money: 0 } }
+    // Caixa só para comer: zerado, o jogador morre de fome antes do fim do mês
+    // e o tick para de avançar sem nunca apurar o imposto.
+    state = { ...state, player: { ...state.player, money: 2000 } }
 
     const after = advance(state, 40).state
     expect(after.market.taxDebts.length).toBeGreaterThan(0)

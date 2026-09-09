@@ -668,6 +668,19 @@ de 6 s do §3.12. **Débito registrado:** se a Fase 5b apertar, o caminho é tir
 histórico de preço do estado produzido pelo Immer e guardá-lo à parte, que é
 para isso que o object store `history` existe.
 
+### Ajustes da Fase 4
+
+| Constante | Antes | Depois | Por quê |
+|---|---|---|---|
+| Cooldown de evento | por definição, global | por **definição + alvo** | greve numa empresa bloqueava greve em todas por um ano; medido no navegador, o feed ficava com a manchete mais recente com 19 dias de idade |
+| `rumorAccuracy` | chance de o veículo publicar o rumor | chance de publicar **dado que é verdadeiro** (e o complemento, se falso) | do jeito antigo o jornal sério publicava *mais* boato que o tabloide, o inverso da tabela do §3.11 |
+| Decaimento do choque | não existia | 50% ao dia | sem ele uma sequência de más notícias empilha choque no teto e o preço passa a andar só por manchete |
+
+**Densidade do feed, medida em 2 anos de jogo:** 120 manchetes, 126 pares
+(evento, alvo) disparados, 30 delas rumor, das quais 12 falsos. A manchete mais
+recente é sempre do dia — o feed não morre com o tempo, que era o defeito da
+primeira versão.
+
 ### O que a Fase 3 mediu, e o que ficou em aberto
 
 Aos 65 anos, em três seeds:

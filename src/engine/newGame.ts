@@ -17,6 +17,7 @@ import type {
 import { createRng, range } from './rng'
 import { INDUSTRIES } from '../data/industries'
 import { COMPANY_SEEDS } from '../data/companies.seed'
+import { NEWS_OUTLETS } from '../data/newsOutlets'
 import { COMPANY_OPS } from '../data/config'
 import { fairValue } from './market'
 import {
@@ -229,6 +230,25 @@ export function seedWorld(state: GameState): void {
       if (company && total > 0) company.marketShare = company.revenue / total
     }
   }
+
+  const outlets: GameState['news']['outlets'] = {}
+  const outletOrder: string[] = []
+  for (const definition of NEWS_OUTLETS) {
+    outlets[definition.id] = {
+      id: definition.id,
+      name: definition.name,
+      credibility: definition.credibility,
+      bias: { ...definition.bias },
+      reach: definition.reach,
+      ownerId: null,
+      publishLagDays: definition.publishLagDays,
+      rumorAccuracy: definition.rumorAccuracy,
+      companyId: definition.companyId,
+    }
+    outletOrder.push(definition.id)
+  }
+  state.news.outlets = outlets
+  state.news.outletOrder = outletOrder
 
   state.industries = industries
   state.industryOrder = industryOrder

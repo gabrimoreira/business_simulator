@@ -5,6 +5,7 @@ import { amortizingPayment, creditLimitFor, loanRateFor, savingsRateFor } from '
 import { BANKS, findBank } from '@/data/banks'
 import { BANKING, MACRO } from '@/data/config'
 import type { CyclePhase } from '@/engine/types'
+import { worldTick } from '@/engine/tick'
 import { advance, employed, fresh, funded, liveDay, withMacro } from './helpers'
 
 describe('macro', () => {
@@ -190,8 +191,11 @@ describe('crédito', () => {
       amount: 15_000,
       termDays: 360,
     }).state
-    // Perde o emprego logo depois de pegar o dinheiro: sem renda e sem caixa,
-    // a parcela não tem de onde sair.
+
+    // A regra é testada no ponto exato em que ela dispara. Simular dois meses
+    // de inadimplência não serve: sem caixa o jogador morre de fome antes, e
+    // qualquer evento que pingue dinheiro paga uma parcela e zera o contador.
+    const loan = state.banking.loans[0]!
     state = {
       ...state,
       player: {
@@ -200,12 +204,16 @@ describe('crédito', () => {
         currentJobId: null,
         career: { ...state.player.career, jobId: null, salary: 0 },
       },
+      banking: {
+        ...state.banking,
+        loans: [{ ...loan, daysOverdue: BANKING.scoreLateAfterDays - 1 }],
+      },
     }
     const before = state.player.creditScore
 
-    const after = advance(state, 35).state
-    expect(after.banking.loans[0]!.daysOverdue).toBeGreaterThanOrEqual(30)
-    expect(after.player.creditScore).toBeLessThan(before - BANKING.scoreLatePenalty / 2)
+    const after = worldTick(state, 1).state
+    expect(after.banking.loans[0]!.daysOverdue).toBe(BANKING.scoreLateAfterDays)
+    expect(before - after.player.creditScore).toBeGreaterThanOrEqual(BANKING.scoreLatePenalty)
   })
 
   it('a recuperação passiva de score para no teto sem histórico de crédito', () => {

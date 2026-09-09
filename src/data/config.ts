@@ -320,3 +320,38 @@ export const COMPANY_OPS = {
   /** Trimestres de lucro guardados. */
   profitHistorySize: 8,
 } as const
+
+// --- Eventos e notícias (spec §5.8 e §5.9) ---------------------------------
+
+export const EVENTS = {
+  /** Probabilidade diária de um evento qualquer ser sorteado. */
+  dailyChance: 0.22,
+  /** Chance de o evento sorteável virar rumor antes de acontecer. */
+  rumorChance: 0.45,
+  /** Prazo em que o rumor se resolve. */
+  rumorMinDays: 3,
+  rumorMaxDays: 14,
+  /** Chance de um rumor ser falso — nunca vai se confirmar. */
+  falseRumorChance: 0.35,
+  /** Janela de eventos mantidos para o passo de notícias. */
+  pendingWindowDays: 5,
+} as const
+
+export const NEWS = {
+  /**
+   * Coeficiente do choque de preço por manchete:
+   * `sentimento × alcance × credibilidade × este número`. Uma matéria devastadora
+   * (−0,85) no veículo de maior alcance e credibilidade alta move ~8%.
+   */
+  priceCoefficient: 0.12,
+  /**
+   * Decaimento do choque acumulado por ativo. Sem ele, uma sequência de
+   * manchetes ruins empilha choque no teto por dias seguidos e o preço passa a
+   * andar por notícia em vez de por fundamento.
+   */
+  shockDecay: 0.5,
+  /** Manchete só sai se a prioridade passar deste piso no veículo. */
+  minPriorityByReach: 3,
+  /** Dia do mês em que a assinatura premium é cobrada. */
+  subscriptionDay: 1,
+} as const

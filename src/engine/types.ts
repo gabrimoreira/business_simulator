@@ -49,7 +49,14 @@ export interface RngState {
   counter: number
 }
 
-export type EntityKind = 'player' | 'company' | 'politician' | 'outlet' | 'tycoon' | 'fund'
+export type EntityKind =
+  | 'player'
+  | 'company'
+  | 'industry'
+  | 'politician'
+  | 'outlet'
+  | 'tycoon'
+  | 'fund'
 
 export interface EntityRef {
   kind: EntityKind

@@ -20,6 +20,8 @@ import { produce } from 'immer'
 import type { DayLog, GameState, LogEntry, PublicView, TickResult } from './types'
 import { stepClock, type DayMarkers } from './clock'
 import { stepMacro } from './macro'
+import { stepEvents } from './events'
+import { stepNews } from './news'
 import { stepCompanies } from './companies'
 import { stepMarket } from './market'
 import { stepBanking } from './banking'
@@ -28,17 +30,11 @@ import { LOG_WINDOW_SIZE } from '../data/config'
 
 /* eslint-disable @typescript-eslint/no-unused-vars -- passos ainda vazios */
 
-/** Passo 3 — sorteio de eventos do mundo e rumores. Fase 4. */
-function stepEvents(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]): void {}
-
 /** Passo 4 — agentes NPC decidem lendo o PublicView de ontem. Fase 5b. */
 function stepAi(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]): void {}
 
 /** Passo 8 — aprovação, tramitação, eleições. Fase 7. */
 function stepPolitics(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]): void {}
-
-/** Passo 9 — converte os eventos do dia em manchetes por veículo. Fase 4. */
-function stepNews(_draft: GameState, _markers: DayMarkers, _log: LogEntry[]): void {}
 
 /* eslint-enable @typescript-eslint/no-unused-vars */
 

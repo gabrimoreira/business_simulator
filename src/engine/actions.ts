@@ -25,6 +25,7 @@ import {
   savingsRateFor,
 } from './banking'
 import { findBank } from '../data/banks'
+import { findOutlet } from '../data/newsOutlets'
 import { BANKING } from '../data/config'
 import { fillBuy, fillSell } from './market'
 
@@ -376,6 +377,44 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         debit(draft, total)
         draft.market.taxDebts.splice(index, 1)
         log.push(entry('bom', 'Imposto quitado.', -total))
+        return
+      }
+
+      case 'assinarVeiculo': {
+        const outlet = findOutlet(action.outletId)
+        if (!outlet) {
+          log.push(entry('ruim', 'Veículo desconhecido.'))
+          return
+        }
+        if (draft.market.subscriptions.some((item) => item.outletId === outlet.id)) {
+          log.push(entry('ruim', 'Você já assina esse veículo.'))
+          return
+        }
+        const cost = nominal(draft.macro, outlet.monthlyCost)
+        if (availableCash(state) < cost) {
+          log.push(entry('ruim', 'Dinheiro insuficiente para a assinatura.'))
+          return
+        }
+        debit(draft, cost)
+        draft.market.subscriptions.push({
+          outletId: outlet.id,
+          startedDayIndex: draft.date.dayIndex,
+          monthlyCost: outlet.monthlyCost,
+        })
+        log.push(entry('info', `Assinatura de ${outlet.name}.`, -cost))
+        return
+      }
+
+      case 'cancelarAssinatura': {
+        const index = draft.market.subscriptions.findIndex(
+          (item) => item.outletId === action.outletId,
+        )
+        if (index < 0) {
+          log.push(entry('ruim', 'Você não assina esse veículo.'))
+          return
+        }
+        draft.market.subscriptions.splice(index, 1)
+        log.push(entry('info', 'Assinatura cancelada.'))
         return
       }
 

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import EmptyState from '@/components/EmptyState.vue'
+import HeadlineList from '@/components/HeadlineList.vue'
 import ScreenTitle from '@/components/ScreenTitle.vue'
 import { useGameStore } from '@/stores/game'
 import { formatMoney, formatMoneyCompact } from '@/lib/format'
@@ -83,6 +85,18 @@ const actions = computed<ActionButton[]>(() => {
 
 const mealsLeft = computed(() => MEALS_PER_DAY - (player.value?.mealsToday ?? 0))
 
+const headlines = computed(() => game.state?.news.headlines ?? [])
+
+/** O boletim é o único veículo que exige assinatura. */
+const premium = computed(() => {
+  const state = game.state
+  if (!state) return null
+  const outlet = state.news.outlets['boletim']
+  if (!outlet) return null
+  const subscribed = state.market.subscriptions.some((item) => item.outletId === outlet.id)
+  return { outlet, subscribed }
+})
+
 function act(action: GameAction): void {
   game.dispatch(action)
   navigator.vibrate?.(12)
@@ -124,6 +138,34 @@ function advance(days: number): void {
           </div>
         </dl>
       </div>
+    </section>
+
+    <section class="px-4 pt-4">
+      <div class="flex items-baseline justify-between pb-2">
+        <h2 class="text-sm font-medium text-muted">Manchetes</h2>
+        <button
+          v-if="premium && !premium.subscribed"
+          class="text-[11px] text-accent"
+          @click="game.dispatch({ kind: 'assinarVeiculo', outletId: premium.outlet.id })"
+        >
+          Assinar {{ premium.outlet.name }}
+        </button>
+        <button
+          v-else-if="premium"
+          class="text-[11px] text-muted"
+          @click="game.dispatch({ kind: 'cancelarAssinatura', outletId: premium.outlet.id })"
+        >
+          Cancelar boletim
+        </button>
+      </div>
+
+      <HeadlineList v-if="headlines.length" :headlines="headlines" :limit="10" />
+      <EmptyState
+        v-else
+        title="O mundo ainda não se moveu"
+        description="É por aqui que você descobre escândalos, resultados e rumores. Rumor move preço antes de virar fato — e nem todo rumor vira."
+        phase="aguardando o primeiro evento"
+      />
     </section>
 
     <section class="px-4 pt-4">
