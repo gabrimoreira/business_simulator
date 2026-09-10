@@ -126,7 +126,10 @@ export const VITALS = {
 export const ACTION_COSTS = {
   // Trabalhar desgasta o humor: sem isso o lazer diário vira fonte infinita de
   // humor e o sistema perde qualquer tensão.
-  trabalhar: { blocks: 1, energy: 30, moodDelta: -1.5 },
+  // `technicalGain` segue a mesma curva de rendimento decrescente do carisma:
+  // aprende-se rápido no começo do ofício e devagar depois. Sem ele, `technical`
+  // só subia por curso e o teto era 33 — com dois empregos exigindo 35 e 55.
+  trabalhar: { blocks: 1, energy: 30, moodDelta: -1.5, technicalGain: 0.08 },
   horaExtra: { blocks: 1, energy: 35, moodDelta: -4, payMultiplier: 1.6 },
   estudar: { blocks: 1, energy: 20, intelligenceGain: 0.02 },
   academia: { blocks: 1, energy: 25, fitnessGain: 0.4, healthGain: 0.3 },

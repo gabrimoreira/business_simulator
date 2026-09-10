@@ -137,6 +137,16 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         player.blocksUsedToday += config.blocks
         player.energy = clampVital(player.energy - cost)
         player.career.performance = clamp(player.career.performance + performanceGain(state), 0, 100)
+        // **Trabalhar ensina o ofício.** Sem isto, `technical` só vinha de curso
+        // e o teto era 33 — somando os seis diplomas do jogo. Técnico de suporte
+        // pede 35 e Desenvolvedor pede 55: dois degraus da escada de carreira
+        // eram **matematicamente inalcançáveis**, e o jogador via "Técnica
+        // 10/35" sem nenhuma ação no jogo capaz de mover aquele número.
+        player.skills.technical = clamp(
+          player.skills.technical + trainedGain(ACTION_COSTS.trabalhar.technicalGain, player.skills.technical),
+          0,
+          100,
+        )
 
         if (action.kind === 'horaExtra') {
           const extra = (player.career.salary / 30) * (ACTION_COSTS.horaExtra.payMultiplier - 1)

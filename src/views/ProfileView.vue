@@ -8,6 +8,8 @@ import { COURSES, findCourse } from '@/data/courses'
 import { jobEligibility } from '@/engine/player'
 import { CAREER } from '@/data/config'
 import { isMuted, toggleMuted } from '@/ui/sound'
+import { monthlyBudget } from '@/engine/selectors'
+import { nominal } from '@/engine/macro'
 import { useFlash } from '@/ui/useFlash'
 
 const game = useGameStore()
@@ -47,14 +49,30 @@ const openings = computed(() => {
 })
 
 const availableCourses = computed(() => {
+  const state = game.state
   const p = player.value
-  if (!p) return []
-  return COURSES.filter((course) => !p.education.includes(course.id)).map((course) => ({
-    course,
-    blocked:
-      course.requires.find((id) => !p.education.includes(id)) ??
-      (p.money < course.cost ? 'sem dinheiro' : null),
-  }))
+  if (!state || !p) return []
+  // Custo em nominal de hoje, como o motor cobra — a tabela está em R$ do ano 0.
+  const orcamento = monthlyBudget(state)
+  return COURSES.filter((course) => !p.education.includes(course.id)).map((course) => {
+    const cost = nominal(state.macro, course.cost)
+    return {
+      course,
+      cost,
+      blocked:
+        course.requires.find((id) => !p.education.includes(id)) ??
+        (p.money < cost ? 'sem dinheiro' : null),
+      /**
+       * Matricular e ficar sem o que comer é a armadilha do início de jogo.
+       *
+       * Medido: com R$ 3.519 o jogador paga R$ 2.411 pelo curso, sobra R$ 1.108,
+       * e cinco dias depois as contas do mês levam R$ 990. Aí não há comida, a
+       * energia despenca, ele para de trabalhar e a partida trava por décadas
+       * com o curso parado no quarto bloco.
+       */
+      apertado: p.money - cost < orcamento.totalExpenses,
+    }
+  })
 })
 
 const skills = computed(() => {
@@ -234,9 +252,12 @@ function quit(): void {
           <div class="min-w-0">
             <p class="text-sm font-medium">{{ item.course.name }}</p>
             <p class="tnum text-xs text-muted">
-              {{ formatMoney(item.course.cost) }} · {{ item.course.studyDays }} blocos de estudo
+              {{ formatMoney(item.cost) }} · {{ item.course.studyDays }} blocos de estudo
             </p>
             <p v-if="item.blocked" class="text-[11px] text-muted">Requer: {{ item.blocked }}</p>
+            <p v-else-if="item.apertado" class="text-[11px] text-warn">
+              Depois de pagar, você fica sem o suficiente para as contas do mês.
+            </p>
           </div>
           <button
             class="min-h-[40px] shrink-0 rounded-lg border border-line px-3 text-sm font-medium disabled:opacity-30"

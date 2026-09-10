@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import EmptyState from '@/components/EmptyState.vue'
 import HeadlineList from '@/components/HeadlineList.vue'
 import BudgetPanel from '@/components/BudgetPanel.vue'
@@ -114,6 +114,9 @@ const overtimePay = computed(() => {
 
 const headlines = computed(() => game.state?.news.headlines ?? [])
 
+/** O feed começa recolhido: notícia é contexto, não a ação do dia. */
+const showAllNews = ref(false)
+
 /** O boletim é o único veículo que exige assinatura. */
 const premium = computed(() => {
   const state = game.state
@@ -192,7 +195,21 @@ function advance(days: number): void {
         </button>
       </div>
 
-      <HeadlineList v-if="headlines.length" :headlines="headlines" :limit="10" />
+      <!-- Três, não dez. O feed ocupava a tela inteira do Início e empurrava as
+           ações do dia para baixo da dobra: o jogo virava um leitor de notícias
+           com botões no rodapé. Quem quer ler abre. -->
+      <HeadlineList
+        v-if="headlines.length"
+        :headlines="headlines"
+        :limit="showAllNews ? 12 : 3"
+      />
+      <button
+        v-if="headlines.length > 3"
+        class="mt-1.5 min-h-[36px] w-full rounded-lg text-[11px] text-muted"
+        @click="showAllNews = !showAllNews"
+      >
+        {{ showAllNews ? 'mostrar menos' : `ver mais ${Math.min(headlines.length - 3, 9)}` }}
+      </button>
       <EmptyState
         v-else
         title="O mundo ainda não se moveu"

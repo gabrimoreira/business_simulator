@@ -7,6 +7,7 @@ import type { DayMarkers } from './clock'
 import { CAREER, ENDGAME, RETIREMENT_AGE, VITALS } from '../data/config'
 import { MONTHLY_BILLS } from '../data/living'
 import { findJob } from '../data/jobs'
+import { findCourse } from '../data/courses'
 import { findAsset } from '../data/assets'
 import { ASSETS_CONFIG } from '../data/config'
 import { nominal } from './macro'
@@ -423,16 +424,35 @@ export function jobEligibility(state: GameState, jobId: string): Eligibility {
     technical: 'Técnica',
     fitness: 'Preparo físico',
   }
+
+  /**
+   * **Como** se sobe cada skill, e não só quanto falta.
+   *
+   * "Técnica 10/35" diz o que falta e não diz o caminho. Pior: até o playtest
+   * não havia caminho — `technical` só vinha de curso, com teto em 33, e este
+   * requisito era inalcançável. Agora trabalhar ensina o ofício, e a dica diz.
+   */
+  const howTo: Record<keyof Skills, string> = {
+    intelligence: 'estudando',
+    charisma: 'socializando',
+    technical: 'trabalhando',
+    fitness: 'na academia',
+  }
   for (const [key, required] of Object.entries(job.requirements.skills) as Array<
     [keyof Skills, number]
   >) {
     if (player.skills[key] < required) {
-      missing.push(`${labels[key]} ${Math.floor(player.skills[key])}/${required}`)
+      missing.push(
+        `${labels[key]} ${Math.floor(player.skills[key])}/${required} — sobe ${howTo[key]}`,
+      )
     }
   }
 
   for (const courseId of job.requirements.education) {
-    if (!player.education.includes(courseId)) missing.push(`Formação: ${courseId}`)
+    if (!player.education.includes(courseId)) {
+      const course = findCourse(courseId)
+      missing.push(`Falta ${course?.name ?? courseId} — matricule-se abaixo`)
+    }
   }
 
   if (job.requirements.minDaysInPreviousJob > 0) {

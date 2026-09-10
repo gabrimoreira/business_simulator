@@ -1,6 +1,13 @@
 /**
  * Cursos (GAME_DESIGN §3.4). `studyDays` é medido em **blocos de estudo**, não em
  * dias de calendário: quem estuda dois blocos por dia termina na metade do tempo.
+ *
+ * **Custo e duração revisados depois do primeiro playtest.** A graduação pedia
+ * R$ 28.000 e 1.100 blocos: com a sobra de R$ 810/mês de um atendente, eram 35
+ * meses juntando dinheiro **e depois** três anos estudando todo dia. Seis anos
+ * até o diploma que abre metade da escada de carreira, e o jogador desistia
+ * antes — com razão. Agora são ~20 meses de poupança e menos de dois anos de
+ * estudo: continua sendo um projeto de vida, deixou de ser uma parede.
  */
 import type { Skills } from '@/engine/types'
 
@@ -27,7 +34,7 @@ export const COURSES: CourseDefinition[] = [
   {
     id: 'tecnico',
     name: 'Curso técnico',
-    studyDays: 240,
+    studyDays: 180,
     cost: 2400,
     grants: { technical: 15 },
     requires: [],
@@ -43,24 +50,24 @@ export const COURSES: CourseDefinition[] = [
   {
     id: 'graduacao',
     name: 'Graduação',
-    studyDays: 1100,
-    cost: 28000,
+    studyDays: 700,
+    cost: 16000,
     grants: { intelligence: 20, technical: 8 },
     requires: [],
   },
   {
     id: 'pos',
     name: 'Pós-graduação',
-    studyDays: 500,
-    cost: 18000,
+    studyDays: 350,
+    cost: 11000,
     grants: { intelligence: 12 },
     requires: ['graduacao'],
   },
   {
     id: 'mba',
     name: 'MBA',
-    studyDays: 700,
-    cost: 90000,
+    studyDays: 500,
+    cost: 55000,
     grants: { charisma: 18, intelligence: 10 },
     requires: ['graduacao'],
   },

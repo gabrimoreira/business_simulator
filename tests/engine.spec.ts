@@ -7,7 +7,9 @@ import { jobEligibility } from '@/engine/player'
 import { monthlyBudget, nextMoneyEvent } from '@/engine/selectors'
 import { assertPureJson } from '@/persistence/serialize'
 import { decideActions, getStrategy } from '@/sim/strategies'
-import { ACTION_BLOCKS_PER_DAY, CAREER } from '@/data/config'
+import { ACTION_BLOCKS_PER_DAY, ACTION_COSTS, CAREER } from '@/data/config'
+import { COURSES } from '@/data/courses'
+import { JOBS } from '@/data/jobs'
 import type { GameAction, GameState } from '@/engine/types'
 import { advance, employed, fresh, funded, hire, liveDay } from './helpers'
 
@@ -228,16 +230,63 @@ describe('educação e carreira', () => {
 
   it('promoção exige skill, diploma e tempo de casa', () => {
     const state = fresh()
+    // A recusa diz o **nome** do curso e não o id, e diz **como** subir a skill:
+    // "Carisma 10/30" informava o que falta e não o caminho, e para Técnica não
+    // havia caminho nenhum até o playtest.
     const analista = jobEligibility(state, 'analista-jr')
     expect(analista.ok).toBe(false)
-    expect(analista.missing.join(' ')).toContain('graduacao')
+    expect(analista.missing.join(' ')).toContain('Graduação')
 
     const encarregado = jobEligibility(state, 'encarregado')
     expect(encarregado.ok).toBe(false)
     expect(encarregado.missing.join(' ')).toContain('Carisma')
+    expect(encarregado.missing.join(' ')).toContain('socializando')
+
+    // Técnica agora tem como subir: era o requisito impossível.
+    const suporte = jobEligibility(state, 'suporte')
+    expect(suporte.missing.join(' ')).toContain('trabalhando')
 
     // A vaga de entrada não exige nada.
     expect(jobEligibility(state, 'atendente').ok).toBe(true)
+  })
+
+  it('todo requisito de emprego é alcançável por alguma ação do jogo', () => {
+    /**
+     * O bug que o playtest achou, travado.
+     *
+     * `technical` só vinha de curso: o teto somando os seis diplomas era **33**,
+     * e Técnico de suporte pede 35 enquanto Desenvolvedor pede 55. Dois degraus
+     * da escada de carreira eram matematicamente impossíveis, e o jogador via
+     * "Técnica 10/35" sem nenhuma ação capaz de mover aquele número.
+     *
+     * Este teste soma o teto de cada skill — inicial + todos os cursos — e
+     * cobra que exista ação treinando a diferença.
+     */
+    const treinavel: Record<string, boolean> = {
+      intelligence: ACTION_COSTS.estudar.intelligenceGain > 0,
+      charisma: ACTION_COSTS.socializar.charismaGain > 0,
+      technical: ACTION_COSTS.trabalhar.technicalGain > 0,
+      fitness: ACTION_COSTS.academia.fitnessGain > 0,
+    }
+
+    const porCurso: Record<string, number> = {}
+    for (const course of COURSES) {
+      for (const [skill, valor] of Object.entries(course.grants)) {
+        porCurso[skill] = (porCurso[skill] ?? 0) + (valor ?? 0)
+      }
+    }
+
+    const inicial = fresh().player.skills
+    for (const job of JOBS) {
+      for (const [skill, exigido] of Object.entries(job.requirements.skills)) {
+        const teto = inicial[skill as keyof typeof inicial] + (porCurso[skill] ?? 0)
+        if (teto >= (exigido ?? 0)) continue
+        expect(
+          treinavel[skill],
+          `${job.title} exige ${skill} ${exigido}, cursos só chegam a ${teto}, e nenhuma ação treina ${skill}`,
+        ).toBe(true)
+      }
+    }
   })
 
   it('recusa a candidatura quando os requisitos não são atendidos', () => {
