@@ -4,11 +4,12 @@ import { runDays } from '@/engine/autoplay'
 import { worldTick } from '@/engine/tick'
 import { advanceDate, daysInMonth, isLeapYear, markersFor } from '@/engine/clock'
 import { jobEligibility } from '@/engine/player'
+import { monthlyBudget, nextMoneyEvent } from '@/engine/selectors'
 import { assertPureJson } from '@/persistence/serialize'
 import { decideActions, getStrategy } from '@/sim/strategies'
-import { ACTION_BLOCKS_PER_DAY } from '@/data/config'
+import { ACTION_BLOCKS_PER_DAY, CAREER } from '@/data/config'
 import type { GameAction, GameState } from '@/engine/types'
-import { fresh, funded, hire, liveDay } from './helpers'
+import { advance, employed, fresh, funded, hire, liveDay } from './helpers'
 
 /** Roda a estratégia do runner, o mesmo caminho que a UI usa. */
 function simulate(days: number, strategyId: 'passive' | 'investor' = 'passive', seed = 42): GameState {
@@ -255,5 +256,66 @@ describe('fim de jogo', () => {
 
     const frozen = worldTick(state, 50)
     expect(frozen.state.date.dayIndex).toBe(state.date.dayIndex)
+  })
+})
+
+describe('extrato do mês', () => {
+  /**
+   * O teste que impede o painel de mentir.
+   *
+   * Um extrato que não fecha com o caixa é pior que não ter extrato: o jogador
+   * passa a desconfiar do número em vez de se orientar por ele.
+   */
+  it('as contas previstas batem com o que o tick debita', () => {
+    // Passa a carência de 30 dias do primeiro mês: nela o motor **não** cobra
+    // contas (Fase 1, para o jogador não nascer num buraco). Medir dentro dela
+    // dava zero de despesa e foi o que este teste pegou de primeira.
+    const inicial = advance(employed(fresh(), 5000, 200_000), CAREER.firstBillsGraceDays).state
+    const previsto = monthlyBudget(inicial)
+
+    const { entries } = advance(inicial, 31)
+
+    const salario = entries
+      .filter((e) => e.text.includes('Salário'))
+      .reduce((sum, e) => sum + (e.amount ?? 0), 0)
+    const contas = entries
+      .filter((e) => e.text.includes('Contas do mês'))
+      .reduce((sum, e) => sum + Math.abs(e.amount ?? 0), 0)
+
+    expect(salario).toBeCloseTo(previsto.totalIncome, 0)
+
+    // Moradia + transporte + saúde são a linha "Contas do mês" do motor.
+    const previstoContas = previsto.expenses
+      .filter((line) => line.label === 'Moradia' || line.label === 'Transporte e saúde')
+      .reduce((sum, line) => sum + line.amount, 0)
+
+    // Tolerância relativa de 0,5%, e não igualdade: o extrato é uma **foto do
+    // nível de preços de hoje**, e a cobrança acontece dias depois, com a
+    // inflação já tendo andado. Medido: 0,14% de deriva em dez dias. Exigir
+    // igualdade aqui seria exigir que o jogo não tivesse inflação.
+    expect(Math.abs(contas - previstoContas) / previstoContas).toBeLessThan(0.005)
+  })
+
+  it('só entra no extrato o que é recorrente', () => {
+    // Comprar ação é evento, não orçamento: se entrasse aqui, o saldo do mês
+    // oscilaria sem significar nada.
+    const rico = funded(fresh(), 10_000_000)
+    const antes = monthlyBudget(rico)
+    const comprou = applyAction(rico, {
+      kind: 'comprarAcao',
+      companyId: rico.companyOrder[0]!,
+      shares: 100,
+      limitPrice: null,
+    }).state
+    expect(monthlyBudget(comprou).totalExpenses).toBeCloseTo(antes.totalExpenses, 5)
+  })
+
+  it('o próximo evento de dinheiro é sempre o mais próximo, e nunca negativo', () => {
+    for (let day = 1; day <= 28; day += 1) {
+      const state = { ...fresh(), date: { ...fresh().date, day } }
+      const evento = nextMoneyEvent(state)
+      expect(evento.days).toBeGreaterThanOrEqual(0)
+      expect(['salário', 'contas']).toContain(evento.label)
+    }
   })
 })

@@ -244,3 +244,19 @@ describe('notícia move preço', () => {
     expect(Math.abs(impact(tabloide) - impact(referencia))).toBeLessThan(0.03)
   })
 })
+
+describe('identidade das manchetes', () => {
+  /**
+   * Guarda de classe, não de instância.
+   *
+   * O feed usa `TransitionGroup`, que reaproveita o DOM pela chave: id repetido
+   * faz a manchete errada aparecer no lugar da nova. Um gerador de id sem o
+   * ator no nome (`hl-tyc-empresa-dia`, com dois tycoons no mesmo dia) já
+   * causou isso, e só apareceu como aviso no console do navegador.
+   */
+  it('nenhum id de manchete se repete em cinco anos', async () => {
+    const state = (await advanceAsync(funded(fresh(), 5_000_000_000), 1825)).state
+    const ids = state.news.headlines.map((headline) => headline.id)
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+})

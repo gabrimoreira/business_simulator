@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import EmptyState from '@/components/EmptyState.vue'
 import HeadlineList from '@/components/HeadlineList.vue'
+import BudgetPanel from '@/components/BudgetPanel.vue'
 import RoutineEditor from '@/components/RoutineEditor.vue'
 import TakeoverAlert from '@/components/TakeoverAlert.vue'
 import ScreenTitle from '@/components/ScreenTitle.vue'
@@ -150,6 +151,8 @@ function advance(days: number): void {
         </dl>
       </div>
     </section>
+
+    <BudgetPanel />
 
     <section class="px-4 pt-4">
       <div class="flex items-baseline justify-between pb-2">

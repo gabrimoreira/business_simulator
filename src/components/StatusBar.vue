@@ -4,6 +4,7 @@ import { useGameStore } from '@/stores/game'
 import { formatGameDate, formatMoneyCompact } from '@/lib/format'
 import { ACTION_BLOCKS_PER_DAY } from '@/data/config'
 import { useFlash } from '@/ui/useFlash'
+import { nextMoneyEvent } from '@/engine/selectors'
 
 const game = useGameStore()
 
@@ -15,6 +16,17 @@ const blocks = computed(() => game.blocksLeft)
 // O caixa é o número que o jogador olha o tempo todo. Piscar na direção da
 // mudança é o que faz salário, conta e compra serem percebidos sem abrir o log.
 const cashFlash = useFlash(() => game.state?.player.money ?? 0, 0.005)
+
+/**
+ * "em caixa" não dizia nada que o número já não dissesse. No lugar, o próximo
+ * evento de dinheiro: é aqui que o jogador olha quando o caixa cai sozinho no
+ * dia 10.
+ */
+const moneyEvent = computed(() => {
+  if (!game.state) return 'em caixa'
+  const next = nextMoneyEvent(game.state)
+  return next.days === 0 ? `${next.label} hoje` : `${next.label} em ${next.days} d`
+})
 </script>
 
 <template>
@@ -33,7 +45,9 @@ const cashFlash = useFlash(() => game.state?.player.money ?? 0, 0.005)
           <p class="tnum text-sm font-semibold leading-tight text-accent" :class="cashFlash">
             {{ money }}
           </p>
-          <p class="text-[11px] leading-tight text-muted">em caixa</p>
+          <p class="text-[11px] leading-tight text-muted">
+            {{ moneyEvent }}
+          </p>
         </div>
         <div class="flex items-center gap-1" :aria-label="`${blocks} blocos de ação restantes`">
           <span

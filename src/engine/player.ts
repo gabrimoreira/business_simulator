@@ -121,7 +121,7 @@ function billsDay(draft: GameState, log: LogEntry[]): void {
       dayIndex: draft.date.dayIndex,
       severity: 'info',
       source: 'player',
-      text: 'Contas do mês pagas.',
+      text: 'Contas do mês: moradia, transporte e saúde.',
       amount: -paid,
     })
   }

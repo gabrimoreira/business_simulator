@@ -527,7 +527,11 @@ function stepTycoons(draft: GameState, log: LogEntry[]): void {
             dayIndex: draft.date.dayIndex,
           })
           draft.news.headlines.push({
-            id: `hl-tyc-${target.id}-${draft.date.dayIndex}`,
+            // O tycoon entra no id, como já entrava no da divulgação logo
+            // acima: dois rivais cruzando 5% na mesma empresa no mesmo dia
+            // geravam manchetes de id idêntico, e o `TransitionGroup` do feed
+            // reaproveitava o DOM errado.
+            id: `hl-tyc-${target.id}-${tycoonId}-${draft.date.dayIndex}`,
             outletId: 'portal',
             dayIndex: draft.date.dayIndex,
             text: `${tycoon.name} amplia posição em ${target.name} para ${(now * 100).toFixed(1)}%`,
