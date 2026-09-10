@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import EmptyState from '@/components/EmptyState.vue'
 import HeadlineList from '@/components/HeadlineList.vue'
 import BudgetPanel from '@/components/BudgetPanel.vue'
+import { ledgerFor } from '@/ui/ledger'
 import RoutineEditor from '@/components/RoutineEditor.vue'
 import TakeoverAlert from '@/components/TakeoverAlert.vue'
 import ScreenTitle from '@/components/ScreenTitle.vue'
@@ -41,6 +42,8 @@ interface ActionButton {
   energy: number
   disabled: boolean
   reason: string | null
+  /** Efeito no caixa, já formatado. `null` quando a ação não mexe em dinheiro. */
+  money: string | null
 }
 
 const actions = computed<ActionButton[]>(() => {
@@ -54,11 +57,13 @@ const actions = computed<ActionButton[]>(() => {
     action: GameAction,
     energy: number,
     extraReason: string | null = null,
+    money: string | null = null,
   ): ActionButton => ({
     label,
     hint,
     action,
     energy,
+    money,
     disabled: noBlocks || p.energy < energy || extraReason !== null,
     reason: extraReason ?? (noBlocks ? 'Sem blocos hoje' : p.energy < energy ? 'Sem energia' : null),
   })
@@ -70,6 +75,10 @@ const actions = computed<ActionButton[]>(() => {
       { kind: 'trabalhar' },
       ACTION_COSTS.trabalhar.energy,
       job.value ? null : 'Você precisa de um emprego',
+      // A confusão número um do jogo: trabalhar **não paga hoje**. O salário é
+      // mensal e cai no dia 5, então o bloco de trabalho rende desempenho para
+      // promoção, e nada de dinheiro imediato.
+      job.value ? 'não paga hoje' : null,
     ),
     build(
       'Estudar',
@@ -83,15 +92,25 @@ const actions = computed<ActionButton[]>(() => {
     build('Socializar', '+carisma, +contatos', { kind: 'socializar' }, ACTION_COSTS.socializar.energy),
     build(
       'Hora extra',
-      '+60% do dia, −humor',
+      'paga na hora, custa humor',
       { kind: 'horaExtra' },
       ACTION_COSTS.horaExtra.energy,
       job.value ? null : 'Você precisa de um emprego',
+      job.value ? `+${formatMoney(overtimePay.value)}` : null,
     ),
   ]
 })
 
 const mealsLeft = computed(() => MEALS_PER_DAY - (player.value?.mealsToday ?? 0))
+
+/** O que o dia moveu no caixa, agrupado. */
+const dayLedger = computed(() => ledgerFor(game.dayLog))
+
+/** Quanto a hora extra paga hoje: o dia de salário vezes o multiplicador. */
+const overtimePay = computed(() => {
+  const salary = player.value?.career.salary ?? 0
+  return (salary / 30) * ACTION_COSTS.horaExtra.payMultiplier
+})
 
 const headlines = computed(() => game.state?.news.headlines ?? [])
 
@@ -199,7 +218,9 @@ function advance(days: number): void {
           <span class="block text-[11px] text-muted">
             {{ item.disabled && item.reason ? item.reason : item.hint }}
           </span>
-          <span class="tnum mt-0.5 block text-[11px] text-muted">−{{ item.energy }} energia</span>
+          <span class="tnum mt-0.5 block text-[11px] text-muted">
+            −{{ item.energy }} energia<template v-if="item.money"> · {{ item.money }}</template>
+          </span>
         </button>
       </div>
     </section>
@@ -247,7 +268,32 @@ function advance(days: number): void {
     </section>
 
     <section v-if="game.dayLog.length" class="px-4 pt-4">
-      <h2 class="pb-2 text-sm font-medium text-muted">Registro</h2>
+      <div class="flex items-baseline justify-between pb-2">
+        <h2 class="text-sm font-medium text-muted">Registro</h2>
+        <!-- O saldo do que aconteceu, antes das linhas soltas: era uma lista
+             cronológica de oito itens sem nenhum total. -->
+        <span
+          v-if="dayLedger.net !== 0"
+          class="tnum text-xs"
+          :class="dayLedger.net >= 0 ? 'text-up' : 'text-down'"
+        >
+          {{ formatMoney(dayLedger.net) }}
+        </span>
+      </div>
+
+      <div v-if="dayLedger.groups.length" class="mb-2 flex flex-wrap gap-1.5">
+        <span
+          v-for="group in dayLedger.groups"
+          :key="group.label"
+          class="rounded-lg bg-surface-2 px-2 py-1 text-[11px]"
+        >
+          {{ group.label }}
+          <span class="tnum" :class="group.total >= 0 ? 'text-up' : 'text-down'">
+            {{ formatMoney(group.total) }}
+          </span>
+        </span>
+      </div>
+
       <ul class="flex flex-col gap-1.5">
         <li
           v-for="item in game.dayLog.slice(0, 8)"

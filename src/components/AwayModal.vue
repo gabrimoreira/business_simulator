@@ -1,23 +1,33 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { DayLog } from '@/engine/types'
 import { formatMoney } from '@/lib/format'
+import { ledgerFor } from '@/ui/ledger'
 
 const props = defineProps<{ log: DayLog[]; title: string }>()
 const emit = defineEmits<{ close: [] }>()
 
-/** Um mês de dias vira uma lista ilegível: agrega e mostra o que importa. */
+/**
+ * Um mês de dias vira uma lista ilegível: agrega e mostra o que importa.
+ *
+ * O extrato por categoria veio depois, e é a parte que faltava: antes o resumo
+ * mostrava **um número líquido só**, e quem avançava um mês via o caixa cair
+ * sem saber o que causou. Pior, a lista filtrava por severidade, então comida e
+ * contas — que são `info` — sumiam justamente do resumo financeiro.
+ */
 const summary = computed(() => {
   const entries = props.log.flatMap((day) => day.entries)
-  const money = entries.reduce((sum, item) => sum + (item.amount ?? 0), 0)
   const notable = entries.filter((item) => item.severity === 'bom' || item.severity === 'ruim' || item.severity === 'critico')
   return {
     days: props.log.length,
-    money,
+    ledger: ledgerFor(entries),
     notable: notable.slice(-12).reverse(),
     quietCount: entries.length - notable.length,
   }
 })
+
+/** Grupo aberto no extrato; só um por vez, para o modal não virar uma parede. */
+const open = ref<string | null>(null)
 </script>
 
 <template>
@@ -30,10 +40,41 @@ const summary = computed(() => {
       <h2 class="text-lg font-semibold">{{ title }}</h2>
       <p class="mt-1 text-sm text-muted">
         {{ summary.days }} {{ summary.days === 1 ? 'dia' : 'dias' }} ·
-        <span class="tnum" :class="summary.money >= 0 ? 'text-up' : 'text-down'">
-          {{ formatMoney(summary.money) }}
+        <span class="tnum" :class="summary.ledger.net >= 0 ? 'text-up' : 'text-down'">
+          {{ formatMoney(summary.ledger.net) }}
         </span>
       </p>
+
+      <!-- O que moveu o caixa, por categoria. Tocar abre as linhas do grupo. -->
+      <div v-if="summary.ledger.groups.length" class="mt-3 rounded-xl bg-surface-2 p-3">
+        <p class="pb-2 text-[11px] uppercase tracking-wide text-muted">No dinheiro</p>
+        <div v-for="group in summary.ledger.groups" :key="group.label">
+          <button
+            class="flex min-h-[36px] w-full items-baseline justify-between gap-3 text-left"
+            @click="open = open === group.label ? null : group.label"
+          >
+            <span class="text-xs">{{ group.label }}</span>
+            <span
+              class="tnum shrink-0 text-xs"
+              :class="group.total >= 0 ? 'text-up' : 'text-down'"
+            >
+              {{ formatMoney(group.total) }}
+            </span>
+          </button>
+          <ul v-if="open === group.label" class="pb-1 pl-3">
+            <li
+              v-for="line in group.lines.slice(-6)"
+              :key="line.id + line.dayIndex"
+              class="flex items-baseline justify-between gap-3"
+            >
+              <span class="truncate text-[11px] text-muted">{{ line.text }}</span>
+              <span class="tnum shrink-0 text-[11px] text-muted">
+                {{ formatMoney(line.amount ?? 0) }}
+              </span>
+            </li>
+          </ul>
+        </div>
+      </div>
 
       <ul class="mt-4 flex flex-col gap-2">
         <li
