@@ -64,10 +64,7 @@ exceções de propósito: `dormir` é automática na virada do dia (resolução 
 blocos), `iniciarPartida` passa pela tela de nova partida e `avancarTempo` é
 roteada para `runDays`, por contrato.
 
-Pela interface, falta caminho para **uma**: `encerrarPartida` — desistir da
-partida antes da morte ou da aposentadoria. A tela de fim existe e é acionada
-pelos dois desfechos naturais; o que não há é o botão de encerrar por vontade
-própria.
+Todas têm caminho pela interface.
 
 `tests/verbs.spec.ts` varre a união inteira e falha se qualquer ação cair no
 `default` do `applyAction` — com controle negativo, para o próprio teste não

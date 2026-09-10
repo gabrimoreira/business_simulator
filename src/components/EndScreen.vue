@@ -11,6 +11,7 @@ const ENDING_TITLE: Record<string, string> = {
   morte: 'Fim da linha',
   falencia: 'Você quebrou',
   prisao: 'A conta chegou',
+  desistencia: 'Você parou por aqui',
 }
 
 const run = computed(() => {

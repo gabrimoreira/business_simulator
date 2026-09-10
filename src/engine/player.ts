@@ -293,6 +293,7 @@ export function finishRun(draft: GameState, ending: EndingKind, log: LogEntry[])
     morte: `Morre ${draft.player.name}, aos ${draft.player.age} anos`,
     falencia: `${draft.player.name} perde tudo e sai de cena`,
     prisao: `${draft.player.name} termina a vida pública atrás das grades`,
+    desistencia: `${draft.player.name} deixa os negócios aos ${draft.player.age}, com ${formatBig(worth)}`,
   }
 
   // Veículo de maior alcance da praça.

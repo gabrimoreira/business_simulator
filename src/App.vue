@@ -16,6 +16,7 @@ const ENDING_LABELS: Record<string, string> = {
   aposentadoria: 'Você se aposentou',
   falencia: 'Você faliu',
   prisao: 'Você foi preso',
+  desistencia: 'Você encerrou a partida',
 }
 
 const endingLabel = computed(() => {

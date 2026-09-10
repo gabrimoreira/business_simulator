@@ -193,6 +193,40 @@ describe('imprensa comprada', () => {
   })
 })
 
+describe('encerrar por vontade própria', () => {
+  it('fecha a partida, escreve manchete e entra no ranking', () => {
+    const state = funded(fresh(), 5_000_000)
+    const result = applyAction(state, { kind: 'encerrarPartida', ending: 'desistencia' })
+
+    expect(result.state.meta.ending).toBe('desistencia')
+    expect(result.state.meta.ranking.length).toBe(state.meta.ranking.length + 1)
+    // Desfecho próprio, e não `aposentadoria` reaproveitada: a manchete de
+    // fecho sai daqui, e "se aposenta aos 18" seria mentira.
+    const closing = result.state.news.headlines.find((h) => h.id.startsWith('hl-fim-'))
+    expect(closing?.text).toContain('deixa os negócios')
+    expect(closing?.text).not.toContain('se aposenta')
+  })
+
+  it('o tempo para de andar depois de encerrar', () => {
+    const encerrada = applyAction(funded(fresh(), 1_000_000), {
+      kind: 'encerrarPartida',
+      ending: 'desistencia',
+    }).state
+    const antes = encerrada.date.dayIndex
+    expect(worldTick(encerrada, 30).state.date.dayIndex).toBe(antes)
+  })
+
+  it('encerrar duas vezes não duplica o ranking', () => {
+    const uma = applyAction(funded(fresh(), 1_000_000), {
+      kind: 'encerrarPartida',
+      ending: 'desistencia',
+    }).state
+    const duas = applyAction(uma, { kind: 'encerrarPartida', ending: 'falencia' }).state
+    expect(duas.meta.ranking.length).toBe(uma.meta.ranking.length)
+    expect(duas.meta.ending).toBe('desistencia')
+  })
+})
+
 describe('margem e venda a descoberto', () => {
   function comMargem() {
     return applyAction(funded(fresh(), 1_000_000), {

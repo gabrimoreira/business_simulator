@@ -989,7 +989,15 @@ export interface PublicView {
 
 export type StartArchetype = 'comum' | 'herdeiro' | 'genio' | 'filhoDePolitico'
 
-export type EndingKind = 'aposentadoria' | 'morte' | 'falencia' | 'prisao'
+/**
+ * `desistencia` é o desfecho voluntário: o jogador encerra antes dos 65.
+ *
+ * Variante própria, e não `aposentadoria` reaproveitada, porque a manchete de
+ * fecho é escrita a partir daqui e "se aposenta aos 27" seria mentira. O
+ * resultado entra no ranking igual aos outros — desistir é um fim, não um
+ * cancelamento.
+ */
+export type EndingKind = 'aposentadoria' | 'morte' | 'falencia' | 'prisao' | 'desistencia'
 
 export interface RunResult {
   id: EntityId

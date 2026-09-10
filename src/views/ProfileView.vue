@@ -97,6 +97,20 @@ async function onFileChosen(event: Event): Promise<void> {
 async function deleteGame(): Promise<void> {
   await game.deleteGame()
 }
+
+/**
+ * Encerrar por vontade própria.
+ *
+ * Pede confirmação porque **não é o mesmo que apagar**: encerrar fecha a
+ * partida, escreve a manchete de fecho e grava o resultado no ranking, que
+ * sobrevive ao New Game+. Um toque acidental aqui custa a corrida inteira.
+ */
+const quitting = ref(false)
+
+function quit(): void {
+  game.dispatch({ kind: 'encerrarPartida', ending: 'desistencia' })
+  quitting.value = false
+}
 </script>
 
 <template>
@@ -289,6 +303,26 @@ async function deleteGame(): Promise<void> {
           accept="application/json"
           @change="onFileChosen"
         />
+        <button
+          v-if="!game.state?.meta.ending"
+          class="min-h-[48px] rounded-xl border border-line bg-surface px-4 text-left text-sm font-medium"
+          @click="quitting = !quitting"
+        >
+          {{ quitting ? 'cancelar' : 'Encerrar partida' }}
+        </button>
+        <div v-if="quitting" class="rounded-xl border border-warn/40 bg-surface p-3">
+          <p class="text-xs leading-snug">
+            Encerrar fecha a partida agora e grava o resultado no ranking. Não dá
+            para voltar — mas o histórico e os arquétipos destravados
+            permanecem.
+          </p>
+          <button
+            class="mt-2 min-h-[44px] w-full rounded-lg border border-warn/50 text-sm font-semibold text-warn"
+            @click="quit"
+          >
+            Encerrar aos {{ game.state?.player.age }} anos
+          </button>
+        </div>
         <button
           class="min-h-[48px] rounded-xl border border-down/40 bg-surface px-4 text-left text-sm font-medium text-down"
           @click="deleteGame"
