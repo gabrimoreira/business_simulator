@@ -74,6 +74,17 @@ const open = ref<string | null>(null)
             </li>
           </ul>
         </div>
+
+        <!-- Fora do saldo de propósito: comprar ação tira do caixa e põe na
+             carteira, com patrimônio idêntico. Contar isso como perda fazia o
+             total do mês dançar sem significar nada. -->
+        <p
+          v-if="summary.ledger.moved > 0"
+          class="mt-2 border-t border-line pt-2 text-[11px] text-muted"
+        >
+          {{ formatMoney(summary.ledger.moved) }} movimentados entre caixa, banco
+          e carteira — não é ganho nem perda.
+        </p>
       </div>
 
       <ul class="mt-4 flex flex-col gap-2">

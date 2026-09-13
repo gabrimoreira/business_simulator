@@ -315,3 +315,58 @@ describe('margem e venda a descoberto', () => {
     ).toBe(true)
   })
 })
+
+describe('retomar a gestão', () => {
+  /**
+   * `nomearCeo` era porta de mão única: punha `managedBy = 'ai'` e a única volta
+   * era reconquistar o controle acionário. Quem delegava por engano perdia a
+   * empresa sem ter vendido nada — foi a queixa do playtest.
+   */
+  function comEmpresaPropria() {
+    const state = funded(fresh(), 50_000_000)
+    const company = state.companies['pulso']!
+    const shares = totalShares(company)
+    return {
+      ...state,
+      companies: {
+        ...state.companies,
+        pulso: {
+          ...company,
+          managedBy: 'player' as const,
+          ownership: [{ holderId: 'player', shares }],
+        },
+      },
+    }
+  }
+
+  it('delegar e reassumir devolve a empresa, e o agente sai junto', () => {
+    const meu = comEmpresaPropria()
+    const delegado = applyAction(meu, {
+      kind: 'nomearCeo',
+      companyId: 'pulso',
+      profileId: 'fortaleza',
+    }).state
+    expect(delegado.companies['pulso']!.managedBy).toBe('ai')
+    expect(delegado.ai.agents['pulso']).toBeDefined()
+
+    const devolta = applyAction(delegado, { kind: 'assumirGestao', companyId: 'pulso' }).state
+    expect(devolta.companies['pulso']!.managedBy).toBe('player')
+    // O agente tem de sumir: deixá-lo faria a IA decidir por uma empresa sua.
+    expect(devolta.ai.agents['pulso']).toBeUndefined()
+  })
+
+  it('sem controle acionário não se reassume', () => {
+    const result = applyAction(funded(fresh(), 1_000_000), {
+      kind: 'assumirGestao',
+      companyId: 'pulso',
+    })
+    expect(result.log.some((e) => e.text.includes('precisa controlar'))).toBe(true)
+    expect(result.state.companies['pulso']!.managedBy).not.toBe('player')
+  })
+
+  it('reassumir o que já é seu é recusado sem efeito', () => {
+    const meu = comEmpresaPropria()
+    const result = applyAction(meu, { kind: 'assumirGestao', companyId: 'pulso' })
+    expect(result.log.some((e) => e.text.includes('já dirige'))).toBe(true)
+  })
+})

@@ -11,6 +11,7 @@ import { INDUSTRIES, findIndustry } from '@/data/industries'
 import { CONTROL, OPERATIONS } from '@/data/config'
 import type { ArchetypeId } from '@/engine/types'
 import { stakeOf } from '@/engine/ownership'
+import { statementFor } from '@/ui/companyStatement'
 
 /** Prazo do crédito empresarial oferecido pelo botão: dez anos. */
 const BUSINESS_LOAN_TERM_DAYS = 3650
@@ -56,6 +57,7 @@ const owned = computed(() => {
           annualizedProfit(company!) >= CONTROL.ipoMinAnnualProfit * state.macro.priceLevel,
         laborCapacity: labor,
         capitalCapacity: capital,
+        statement: statementFor(state, company!, industry),
       }
     })
 })
@@ -66,6 +68,10 @@ const delegating = ref<string | null>(null)
 const profiles = computed(() => Object.values(game.state?.ai.profiles ?? {}))
 
 /** Delegação da resolução C2: o late game é nomear personalidades, não clicar. */
+function takeBack(companyId: string): void {
+  game.dispatch({ kind: 'assumirGestao', companyId })
+}
+
 function appoint(companyId: string, profileId: ArchetypeId): void {
   game.dispatch({ kind: 'nomearCeo', companyId, profileId })
   delegating.value = null
@@ -336,6 +342,64 @@ function merge(acquirerId: string, targetId: string): void {
           min="0"
           placeholder="Valor para investir em capacidade"
         />
+        <!-- Para onde vai o dinheiro: a mesma conta que o motor faz todo dia. -->
+        <details class="mt-3">
+          <summary class="min-h-[44px] cursor-pointer list-none rounded-xl border border-line px-3 py-3 text-sm text-muted">
+            De onde vem e para onde vai
+          </summary>
+          <div class="flex flex-col gap-1 pt-2">
+            <div
+              v-for="line in item.statement.lines"
+              :key="line.label"
+              class="flex items-baseline justify-between gap-3"
+            >
+              <span class="text-xs">
+                {{ line.label }}
+                <span v-if="line.hint" class="text-[11px] text-muted">· {{ line.hint }}</span>
+              </span>
+              <span class="tnum shrink-0 text-xs" :class="line.amount >= 0 ? 'text-up' : 'text-down'">
+                {{ formatMoneyCompact(line.amount) }}
+              </span>
+            </div>
+            <div class="mt-1 flex items-baseline justify-between border-t border-line pt-1">
+              <span class="text-xs font-medium">Lucro por ano</span>
+              <span
+                class="tnum text-sm font-semibold"
+                :class="item.statement.profit >= 0 ? 'text-up' : 'text-down'"
+              >
+                {{ formatMoneyCompact(item.statement.profit) }}
+              </span>
+            </div>
+
+            <p class="pt-2 text-[11px] text-muted">
+              Capacidade de {{ formatMoneyCompact(item.statement.capacity) }}/ano, limitada por
+              <strong>{{ item.statement.bottleneck }}</strong>.
+              <template v-if="item.statement.bottleneck === 'mão de obra'">
+                Contratar mais um exige {{ formatMoneyCompact(item.statement.capitalPerHead) }}
+                de capital junto — é o giro de {{ item.industry.capitalTurnover }}× do setor.
+              </template>
+              <template v-else-if="item.statement.bottleneck === 'capital'">
+                Há gente ociosa: ampliar capacidade rende mais que contratar.
+              </template>
+              <template v-else>
+                Você produz mais do que vende. Preço, marca e qualidade movem a
+                demanda — capacidade não.
+              </template>
+            </p>
+          </div>
+        </details>
+
+        <!-- O aviso que faltava antes da recuperação judicial. -->
+        <p
+          v-if="item.statement.negativeQuarters > 0"
+          class="mt-2 rounded-xl border border-down/40 bg-down/10 p-3 text-[11px] text-down"
+        >
+          Caixa negativo há {{ item.statement.negativeQuarters }}
+          {{ item.statement.negativeQuarters === 1 ? 'trimestre' : 'trimestres' }} — mais
+          {{ item.statement.quartersToBankruptcy - item.statement.negativeQuarters }}
+          e a empresa vai a recuperação judicial.
+        </p>
+
         <div class="mt-2 grid grid-cols-2 gap-2">
           <button
             class="min-h-[44px] rounded-xl border border-line text-sm font-medium disabled:opacity-30"
@@ -384,12 +448,28 @@ function merge(acquirerId: string, targetId: string): void {
             Encolher 20%
           </button>
           <button
+            v-if="!item.ceo"
             class="col-span-2 min-h-[44px] rounded-xl border border-line text-sm text-muted"
             @click="delegating = delegating === item.company.id ? null : item.company.id"
           >
             {{ delegating === item.company.id ? 'cancelar' : 'Nomear um CEO' }}
           </button>
+          <button
+            v-else
+            class="col-span-2 min-h-[44px] rounded-xl border border-accent/50 text-sm font-medium text-accent"
+            @click="takeBack(item.company.id)"
+          >
+            Reassumir a gestão
+          </button>
         </div>
+
+        <!-- O que a delegação custa, **antes** do clique: era porta de mão única,
+             e quem nomeava por engano perdia a empresa sem ter vendido nada. -->
+        <p v-if="delegating === item.company.id" class="pt-2 text-[11px] text-warn">
+          O CEO decide preço, marketing, P&D e contratação sozinho, e a empresa sai
+          dos seus blocos do dia. Você pode reassumir depois, enquanto tiver o
+          controle acionário.
+        </p>
 
         <!-- Caixa: crédito, dividendo, recompra e campanha. -->
         <div class="grid grid-cols-2 gap-2 pt-2">

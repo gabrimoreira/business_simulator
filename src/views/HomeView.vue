@@ -298,6 +298,10 @@ function advance(days: number): void {
         </span>
       </div>
 
+      <p v-if="dayLedger.moved > 0" class="pb-1.5 text-[11px] text-muted">
+        {{ formatMoney(dayLedger.moved) }} movimentados entre contas — fora do saldo.
+      </p>
+
       <div v-if="dayLedger.groups.length" class="mb-2 flex flex-wrap gap-1.5">
         <span
           v-for="group in dayLedger.groups"

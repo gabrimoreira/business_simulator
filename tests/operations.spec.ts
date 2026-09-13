@@ -12,6 +12,8 @@ import { sectorMultiple } from '@/engine/market'
 import { findIndustry } from '@/data/industries'
 import { OPERATIONS } from '@/data/config'
 import type { GameState } from '@/engine/types'
+import { statementFor } from '@/ui/companyStatement'
+import { annualizedProfit } from '@/engine/companies'
 import { advance, advanceAsync, fresh, funded } from './helpers'
 
 function foundedState(capital = 200_000, industryId = 'varejo'): { state: GameState; id: string } {
@@ -234,5 +236,61 @@ describe('mundo listado continua vivo', () => {
     const dead = state.companyOrder.filter((id) => state.companies[id]!.status !== 'ativa')
     expect(dead.length).toBeLessThan(6)
     expect(state.macro.marketIndex).toBeGreaterThan(50)
+  })
+})
+
+describe('demonstrativo da empresa', () => {
+  /**
+   * O mesmo princípio do extrato pessoal: demonstrativo que não fecha com o que
+   * o motor faz é pior que nenhum, porque o jogador decide olhando para ele.
+   */
+  it('as linhas somam o lucro que o tick de fato produz', async () => {
+    const base = funded(fresh(), 50_000_000)
+    const fundada = applyAction(base, {
+      kind: 'fundarEmpresa',
+      name: 'Teste',
+      industryId: 'varejo',
+      capital: 200_000,
+    }).state
+    const rodada = (await advanceAsync(fundada, 400)).state
+
+    const id = rodada.companyOrder.find((c) => rodada.companies[c]?.managedBy === 'player')!
+    const company = rodada.companies[id]!
+    const industry = findIndustry(company.industryId)!
+    const statement = statementFor(rodada, company, industry)
+
+    // O lucro do demonstrativo é a soma das próprias linhas.
+    const soma = statement.lines.reduce((total, line) => total + line.amount, 0)
+    expect(soma).toBeCloseTo(statement.profit, 2)
+
+    // E bate com o lucro anualizado que o motor calcula, dentro do ruído diário
+    // do próprio `stepCompanyDay` (`revenueNoise`).
+    const doMotor = annualizedProfit(company)
+    if (Math.abs(doMotor) > 1000) {
+      expect(Math.abs(statement.profit - doMotor) / Math.abs(doMotor)).toBeLessThan(0.35)
+    }
+  })
+
+  it('aponta o gargalo certo: sem capital, é capital', async () => {
+    const base = funded(fresh(), 50_000_000)
+    // Capital no mínimo e gente demais: a máquina é que segura.
+    const fundada = applyAction(base, {
+      kind: 'fundarEmpresa',
+      name: 'Apertada',
+      industryId: 'varejo',
+      capital: 60_000,
+    }).state
+    const id = fundada.companyOrder.find((c) => fundada.companies[c]?.managedBy === 'player')!
+    const contratou = applyAction(fundada, {
+      kind: 'contratar',
+      companyId: id,
+      count: 20,
+      salary: 42_000,
+    }).state
+    const rodada = (await advanceAsync(contratou, 120)).state
+
+    const company = rodada.companies[id]!
+    const statement = statementFor(rodada, company, findIndustry(company.industryId)!)
+    expect(statement.bottleneck).toBe('capital')
   })
 })

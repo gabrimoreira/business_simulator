@@ -1976,6 +1976,38 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         return
       }
 
+      case 'assumirGestao': {
+        const company = draft.companies[action.companyId]
+        if (!company) {
+          log.push(entry('ruim', 'Empresa desconhecida.'))
+          return
+        }
+        if (stakeOf(company, 'player') <= CONTROL.controlStake) {
+          log.push(entry('ruim', 'Você precisa controlar a empresa para retomar a gestão.'))
+          return
+        }
+        if (company.managedBy === 'player') {
+          log.push(entry('ruim', 'Você já dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        player.blocksUsedToday += 1
+
+        // **Dono demite CEO.** `nomearCeo` era porta de mão única: punha
+        // `managedBy = 'ai'` e a única volta era reconquistar o controle. Quem
+        // delegou por engano perdia a empresa sem ter vendido nada.
+        //
+        // O agente sai junto: deixá-lo no estado faria o passo de IA continuar
+        // decidindo por uma empresa que voltou a ser sua.
+        company.managedBy = 'player'
+        delete draft.ai.agents[company.id]
+        log.push(entry('bom', `Você reassumiu a gestão de ${company.name}.`))
+        return
+      }
+
       default:
         // Ações das fases seguintes; `avancarTempo` é roteada para runDays.
         log.push(entry('ruim', `Ação ainda não implementada: ${action.kind}.`))
