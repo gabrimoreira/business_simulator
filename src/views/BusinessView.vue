@@ -151,6 +151,37 @@ function openCapital(companyId: string, valuation: number): void {
   })
 }
 
+/**
+ * O RH: para onde o quadro está indo, e quanto isso custa por mês.
+ *
+ * A conta é a do motor, não uma segunda fórmula — `stepCompanyDay` move
+ * `headcountAdjustSpeed` da diferença por dia e cobra um mês de folha por
+ * cabeça contratada.
+ */
+function hiringPace(companyId: string): { perMonth: number; costPerMonth: number; months: number } | null {
+  const company = game.state?.companies[companyId]
+  if (!company) return null
+  const gap = company.directives.headcountTarget - company.workforce.headcount
+  if (gap <= 0) return null
+  const perDay = gap * OPERATIONS.headcountAdjustSpeed
+  const perMonth = perDay * 30
+  return {
+    perMonth,
+    costPerMonth: (perMonth * company.workforce.avgSalary) / 12,
+    // Decaimento geométrico: o ritmo cai junto com a diferença que falta.
+    months: Math.log(0.1) / Math.log(1 - OPERATIONS.headcountAdjustSpeed) / 30,
+  }
+}
+
+const headcountTarget = ref<number | null>(null)
+
+function setTarget(companyId: string): void {
+  const target = headcountTarget.value
+  if (!target || target < 1) return
+  game.dispatch({ kind: 'definirQuadroAlvo', companyId, target })
+  headcountTarget.value = null
+}
+
 function hire(companyId: string, count: number): void {
   const company = game.state?.companies[companyId]
   const industry = company ? findIndustry(company.industryId) : null
@@ -421,6 +452,64 @@ function merge(acquirerId: string, targetId: string): void {
           e a empresa vai a recuperação judicial.
         </p>
 
+        <!-- O RH. Contratar à vista é o salto; o alvo é o rumo, e a empresa
+             persegue sozinha com o caixa dela. -->
+        <div class="mt-3 rounded-xl border border-line p-3">
+          <div class="flex items-baseline justify-between gap-2">
+            <p class="text-xs font-medium">Alvo de quadro</p>
+            <p class="tnum text-[11px] text-muted">
+              hoje {{ Math.round(item.company.workforce.headcount) }} ·
+              alvo {{ Math.round(item.company.directives.headcountTarget) }}
+            </p>
+          </div>
+
+          <div class="mt-2 flex gap-2">
+            <input
+              v-model.number="headcountTarget"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              :placeholder="`${Math.max(1, Math.round(item.company.workforce.headcount * 2))}`"
+              class="min-h-[44px] w-full rounded-xl border border-line bg-surface-2 px-3 text-sm"
+            />
+            <button
+              class="min-h-[44px] shrink-0 rounded-xl border border-accent/50 px-3 text-xs font-medium text-accent disabled:opacity-30"
+              :disabled="!headcountTarget || headcountTarget < 1"
+              @click="setTarget(item.company.id)"
+            >
+              Definir
+            </button>
+          </div>
+
+          <p v-if="hiringPace(item.company.id)" class="pt-2 text-[11px] leading-snug text-muted">
+            Contratando ~{{ Math.max(1, Math.round(hiringPace(item.company.id)!.perMonth)) }}/mês ·
+            {{ formatMoneyCompact(hiringPace(item.company.id)!.costPerMonth) }}/mês do caixa ·
+            chega perto do alvo em ~{{ Math.round(hiringPace(item.company.id)!.months) }} meses.
+          </p>
+          <p v-else class="pt-2 text-[11px] leading-snug text-muted">
+            Defina onde você quer chegar e a empresa contrata sozinha, pagando do caixa dela.
+            Um bloco só, e ela não para até lá.
+          </p>
+          <p
+            v-if="item.statement.bottleneck !== 'mão de obra'"
+            class="pt-1 text-[11px] leading-snug text-muted"
+          >
+            Mas o que segura a produção hoje é
+            <strong>{{ item.statement.bottleneck }}</strong> — contratar agora não move receita.
+          </p>
+
+          <div class="mt-2 grid grid-cols-3 gap-2">
+            <button
+              v-for="lote in [10, 50, 100]"
+              :key="lote"
+              class="min-h-[44px] rounded-xl border border-line text-xs font-medium"
+              @click="hire(item.company.id, lote)"
+            >
+              +{{ lote }} agora
+            </button>
+          </div>
+        </div>
+
         <!-- Dinheiro entre o seu bolso e o da empresa. O campo de valor acima
              serve aos dois. -->
         <div class="mt-2 grid grid-cols-2 gap-2">
@@ -461,19 +550,6 @@ function merge(acquirerId: string, targetId: string): void {
                 +{{ formatMoneyCompact((amount ?? 0) * item.industry.capitalTurnover) }} de produção
               </template>
               <template v-else>não muda nada agora</template>
-            </span>
-          </button>
-          <button
-            class="min-h-[44px] rounded-xl border px-2 text-xs leading-tight font-medium"
-            :class="item.statement.bottleneck === 'mão de obra' ? 'border-accent/50 text-accent' : 'border-line'"
-            @click="hire(item.company.id, 1)"
-          >
-            Contratar 1
-            <span class="block text-[11px] font-normal text-muted">
-              <template v-if="item.statement.bottleneck === 'mão de obra'">
-                +{{ formatMoneyCompact(item.industry.outputPerEmployee * (item.company.workforce.productivity / 100)) }} de produção
-              </template>
-              <template v-else>há gente ociosa</template>
             </span>
           </button>
           <button

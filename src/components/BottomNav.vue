@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
 
-/** Alvos de ≥ 44px e nenhum estado de :hover (spec §6). */
+/**
+ * Alvos de ≥ 44px e nenhum estado de :hover (spec §6).
+ *
+ * **Seis abas, não cinco** (resolução C14): com seis, cada alvo cai para 65px em
+ * 390px de tela e 60px em 360px — ainda bem acima do mínimo de toque, mas o
+ * rótulo desce para 10px para "Patrimônio" caber sem quebrar linha.
+ */
 const tabs = [
   { to: '/', label: 'Início', icon: 'feed' },
   { to: '/mercado', label: 'Mercado', icon: 'chart' },
   { to: '/negocios', label: 'Negócios', icon: 'building' },
   { to: '/mundo', label: 'Mundo', icon: 'globe' },
+  { to: '/patrimonio', label: 'Patrimônio', icon: 'vault' },
   { to: '/perfil', label: 'Perfil', icon: 'user' },
 ] as const
 
@@ -23,12 +30,12 @@ const isActive = (to: string): boolean => route.path === to
       <li v-for="tab in tabs" :key="tab.to" class="flex-1">
         <RouterLink
           :to="tab.to"
-          class="flex min-h-[56px] flex-col items-center justify-center gap-1 px-1 py-2 transition-colors"
+          class="flex min-h-[56px] flex-col items-center justify-center gap-1 px-0.5 py-2 transition-colors"
           :class="isActive(tab.to) ? 'text-accent' : 'text-muted'"
           :aria-current="isActive(tab.to) ? 'page' : undefined"
         >
           <svg
-            class="h-6 w-6"
+            class="h-[22px] w-[22px]"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -56,12 +63,17 @@ const isActive = (to: string): boolean => route.path === to
               <circle cx="12" cy="12" r="8" />
               <path d="M4 12h16M12 4c2.5 2.2 2.5 13.8 0 16M12 4c-2.5 2.2-2.5 13.8 0 16" />
             </template>
+            <template v-else-if="tab.icon === 'vault'">
+              <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+              <circle cx="12" cy="12" r="3.5" />
+              <path d="M12 6.5v2M12 15.5v2M6.5 12h2M15.5 12h2" />
+            </template>
             <template v-else>
               <circle cx="12" cy="8.5" r="3.5" />
               <path d="M5 20c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5" />
             </template>
           </svg>
-          <span class="text-[11px] leading-none tracking-tight">{{ tab.label }}</span>
+          <span class="text-[10px] leading-none tracking-tight">{{ tab.label }}</span>
         </RouterLink>
       </li>
     </ul>

@@ -1068,6 +1068,7 @@ export type ActionKind =
   | 'ajustarPreco'
   | 'ajustarMarketing'
   | 'investirPeD'
+  | 'definirQuadroAlvo'
   | 'contratar'
   | 'demitir'
   | 'demissaoEmMassa'
@@ -1141,6 +1142,7 @@ export type GameAction =
   | { kind: 'ajustarPreco'; companyId: EntityId; price: number }
   | { kind: 'ajustarMarketing'; companyId: EntityId; ratio: Ratio }
   | { kind: 'investirPeD'; companyId: EntityId; ratio: Ratio }
+  | { kind: 'definirQuadroAlvo'; companyId: EntityId; target: number }
   | { kind: 'contratar'; companyId: EntityId; count: number; salary: Money }
   | { kind: 'demitir'; companyId: EntityId; employeeId: EntityId }
   | { kind: 'demissaoEmMassa'; companyId: EntityId; count: number }

@@ -14,11 +14,7 @@
 import { computed, ref } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { formatMoneyCompact } from '@/lib/format'
-import { valuationOf } from '@/engine/companies'
-import { sectorMultiple } from '@/engine/market'
-import { findIndustry } from '@/data/industries'
-import { NEWS } from '@/data/config'
-import { nominal } from '@/engine/macro'
+import { outletPrice } from '@/engine/selectors'
 
 const game = useGameStore()
 const aiming = ref<string | null>(null)
@@ -29,15 +25,9 @@ const outlets = computed(() => {
   return state.news.outletOrder.flatMap((id) => {
     const outlet = state.news.outlets[id]
     if (!outlet) return []
-    const listed = outlet.companyId ? state.companies[outlet.companyId] : null
-    const industry = listed ? findIndustry(listed.industryId) : null
-    // Mesma conta do motor: o alcance é piso, e o valuation só manda quando
-    // passa dele. Sem o piso, veículo listado e endividado saía por R$ 0,00.
-    const floor = nominal(state.macro, outlet.reach * NEWS.outletPricePerReach)
-    const price =
-      listed && industry
-        ? Math.max(floor, valuationOf(listed, sectorMultiple(industry.multipleBase, state.macro.selic)))
-        : floor
+    // A conta é a do motor, chamada e não recopiada: o alcance é piso, e o
+    // valuation só manda quando passa dele.
+    const price = outletPrice(state, outlet)
     const order = state.news.editorialOrders.find(
       (item) => item.outletId === id && state.date.dayIndex < item.cooldownUntilDayIndex,
     )

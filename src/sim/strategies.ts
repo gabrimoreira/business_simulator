@@ -7,16 +7,14 @@ import type { ActionBlockKind, GameAction, GameState } from '@/engine/types'
 import { JOBS } from '@/data/jobs'
 import { COURSES } from '@/data/courses'
 import { BANKS } from '@/data/banks'
-import { INDUSTRIES, findIndustry } from '@/data/industries'
+import { INDUSTRIES } from '@/data/industries'
 import { annualizedProfit, capitalNeededFor } from '@/engine/companies'
 import { jobEligibility } from '@/engine/player'
 import { nominal } from '@/engine/macro'
 import { fairValue } from '@/engine/market'
-import { portfolioValue } from '@/engine/selectors'
+import { outletPrice, portfolioValue } from '@/engine/selectors'
 import { stakeOf, totalShares } from '@/engine/ownership'
-import { valuationOf } from '@/engine/companies'
-import { sectorMultiple } from '@/engine/market'
-import { CONTROL, NEWS, POLITICS, TYCOONS } from '@/data/config'
+import { CONTROL, POLITICS, TYCOONS } from '@/data/config'
 import type { PublicOffice } from '@/engine/types'
 
 /**
@@ -594,17 +592,7 @@ export function decideActions(state: GameState, strategy: Strategy): GameAction[
         .flatMap((id) => {
           const outlet = state.news.outlets[id]
           if (!outlet || outlet.ownerId !== null) return []
-          const listed = outlet.companyId ? state.companies[outlet.companyId] : null
-          const industry = listed ? findIndustry(listed.industryId) : null
-          const floor = nominal(state.macro, outlet.reach * NEWS.outletPricePerReach)
-          const price =
-            listed && industry
-              ? Math.max(
-                  floor,
-                  valuationOf(listed, sectorMultiple(industry.multipleBase, state.macro.selic)),
-                )
-              : floor
-          return [{ id, outlet, price }]
+          return [{ id, outlet, price: outletPrice(state, outlet) }]
         })
         .filter((item) => item.price <= player.money - nominal(state.macro, SURVIVAL_BUFFER))
         .sort((a, b) => b.outlet.reach - a.outlet.reach)[0]

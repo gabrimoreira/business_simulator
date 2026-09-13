@@ -541,6 +541,47 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         return
       }
 
+      /**
+       * O alvo de quadro — o RH da empresa.
+       *
+       * `contratar` é o salto: você paga o mês adiantado de N pessoas e elas
+       * entram hoje. Isso custa um bloco por clique, e pôr 200 pessoas assim
+       * custaria 200 blocos, ou 67 dias clicando. Era a queixa do playtest.
+       *
+       * Aqui é o contrário: você diz **onde quer chegar** e a empresa contrata
+       * sozinha, dia a dia, pagando do caixa dela — a regra de
+       * `stepCompanyDay` que já existia (`companies.ts`) e que até agora só a
+       * IA sabia usar (`ai/companyAgent.ts` move este mesmo campo). Ter o verbo
+       * só do lado da IA quebrava a paridade de ações do `CLAUDE.md §4`.
+       *
+       * **Não cobra caixa agora**, de propósito: é diretriz, como preço e
+       * marketing, e o bloco é cobrado ao *alterar*. Também não tem teto — a
+       * empresa para de contratar quando o caixa acaba, e gente sem máquina não
+       * produz (`capacityOf`). Quem decide é o dono; o trabalho da tela é dizer
+       * o preço antes.
+       */
+      case 'definirQuadroAlvo': {
+        const company = draft.companies[action.companyId]
+        if (!company || company.managedBy !== 'player') {
+          log.push(entry('ruim', 'Você não dirige essa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        if (!Number.isFinite(action.target) || action.target < 1) {
+          log.push(entry('ruim', 'O alvo de quadro tem de ser ao menos 1 pessoa.'))
+          return
+        }
+        player.blocksUsedToday += 1
+        const target = Math.round(action.target)
+        company.directives.headcountTarget = target
+        const rumo = target > company.workforce.headcount ? 'contratando até' : 'enxugando até'
+        log.push(entry('info', `${company.name}: ${rumo} ${target} pessoas.`))
+        return
+      }
+
       case 'contratar': {
         const company = draft.companies[action.companyId]
         if (!company || company.managedBy !== 'player') {
@@ -569,7 +610,9 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
           (company.workforce.avgSalary * company.workforce.headcount + action.salary * action.count) /
           total
         company.workforce.headcount = total
-        company.directives.headcountTarget = total
+        // **Nunca para baixo.** Contratar 10 à vista com um alvo de 500 de pé
+        // cancelaria o alvo, e o RH pararia sem ninguém ter pedido.
+        company.directives.headcountTarget = Math.max(total, company.directives.headcountTarget)
         log.push(entry('info', `${action.count} contratados em ${company.name}.`, -cost))
         return
       }

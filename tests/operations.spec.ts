@@ -11,7 +11,7 @@ import {
 import { sectorMultiple } from '@/engine/market'
 import { findIndustry } from '@/data/industries'
 import { OPERATIONS } from '@/data/config'
-import type { GameState } from '@/engine/types'
+import type { ArchetypeId, GameState } from '@/engine/types'
 import { statementFor } from '@/ui/companyStatement'
 import { annualizedProfit } from '@/engine/companies'
 import { advance, advanceAsync, fresh, funded } from './helpers'
@@ -292,5 +292,95 @@ describe('demonstrativo da empresa', () => {
     const company = rodada.companies[id]!
     const statement = statementFor(rodada, company, findIndustry(company.industryId)!)
     expect(statement.bottleneck).toBe('capital')
+  })
+})
+
+describe('alvo de quadro', () => {
+  /**
+   * Funda e deixa o jogador com dinheiro para comer.
+   *
+   * `foundedState` põe quase todo o caixa na empresa, e quem não come morre no
+   * dia ~33: sem isto, `advance` para no meio e o teste mede um mundo parado.
+   */
+  function comEmpresa(capital = 2_000_000): { state: GameState; id: string } {
+    const { state, id } = foundedState(capital)
+    return { state: funded(state, 500_000), id }
+  }
+
+  /**
+   * O RH da empresa.
+   *
+   * O playtest travou em "Contratar 1": pôr 200 pessoas custaria 200 blocos, ou
+   * 67 dias clicando. O alvo já existia no motor e já era perseguido todo dia —
+   * só a IA sabia usá-lo. Estes testes cobram o verbo do lado do jogador.
+   */
+  it('faz a empresa contratar sozinha ao longo dos dias, pagando do caixa dela', () => {
+    const { state: founded, id } = comEmpresa()
+    const antesQuadro = founded.companies[id]!.workforce.headcount
+    const antesCaixa = founded.companies[id]!.cash
+
+    const definiu = applyAction(founded, { kind: 'definirQuadroAlvo', companyId: id, target: 60 })
+    expect(definiu.state.companies[id]!.directives.headcountTarget).toBe(60)
+    // Diretriz não cobra caixa na hora: o dinheiro sai conforme contrata.
+    expect(definiu.state.companies[id]!.cash).toBe(antesCaixa)
+
+    const depois = advance(definiu.state, 180).state
+    const company = depois.companies[id]!
+    expect(company.workforce.headcount).toBeGreaterThan(antesQuadro)
+    expect(company.workforce.headcount).toBeLessThanOrEqual(60)
+    expect(company.cash).toBeLessThan(antesCaixa)
+  })
+
+  it('alvo abaixo do quadro enxuga', () => {
+    const { state: founded, id } = comEmpresa()
+    const cheia = applyAction(founded, { kind: 'definirQuadroAlvo', companyId: id, target: 80 })
+    const crescida = advance(cheia.state, 300).state
+    const pico = crescida.companies[id]!.workforce.headcount
+
+    const cortou = applyAction(crescida, { kind: 'definirQuadroAlvo', companyId: id, target: 5 })
+    const depois = advance(cortou.state, 300).state
+    expect(depois.companies[id]!.workforce.headcount).toBeLessThan(pico)
+  })
+
+  it('contratar à vista não derruba um alvo maior', () => {
+    /**
+     * O bug que o alvo persistente criaria. `contratar` escrevia
+     * `headcountTarget = total`, então contratar 2 com um alvo de 500 de pé
+     * cancelaria o alvo — o RH pararia sem ninguém ter pedido.
+     */
+    const { state: founded, id } = comEmpresa()
+    const definiu = applyAction(founded, { kind: 'definirQuadroAlvo', companyId: id, target: 500 })
+    const contratou = applyAction(definiu.state, {
+      kind: 'contratar',
+      companyId: id,
+      count: 2,
+      salary: 40_000,
+    })
+    expect(contratou.state.companies[id]!.directives.headcountTarget).toBe(500)
+  })
+
+  it('exige dirigir a empresa, custa um bloco e recusa alvo inválido', () => {
+    const { state: founded, id } = comEmpresa()
+
+    const gasto = applyAction(founded, { kind: 'definirQuadroAlvo', companyId: id, target: 30 })
+    expect(gasto.state.player.blocksUsedToday).toBe(founded.player.blocksUsedToday + 1)
+
+    const zero = applyAction(founded, { kind: 'definirQuadroAlvo', companyId: id, target: 0 })
+    expect(zero.state.companies[id]!.directives.headcountTarget).toBe(
+      founded.companies[id]!.directives.headcountTarget,
+    )
+    expect(zero.log.some((entry) => entry.severity === 'ruim')).toBe(true)
+
+    const delegada = applyAction(founded, {
+      kind: 'nomearCeo',
+      companyId: id,
+      profileId: (Object.keys(founded.ai.profiles) as ArchetypeId[])[0]!,
+    })
+    const recusada = applyAction(delegada.state, {
+      kind: 'definirQuadroAlvo',
+      companyId: id,
+      target: 99,
+    })
+    expect(recusada.log.some((entry) => entry.text.includes('não dirige'))).toBe(true)
   })
 })

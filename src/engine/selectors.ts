@@ -3,14 +3,14 @@
  * UI recalcula por render). Só entra aqui o que tem pelo menos dois consumidores
  * concretos hoje (spec §10.6).
  */
-import type { GameState, Money } from './types'
+import type { GameState, Money, NewsOutlet } from './types'
 import { nominal, real } from './macro'
 import { valuationOf } from './companies'
 import { sectorMultiple } from './market'
 import { findIndustry } from '../data/industries'
 import { MONTHLY_BILLS } from '../data/living'
 import { findAsset } from '../data/assets'
-import { CAREER } from '../data/config'
+import { CAREER, NEWS } from '../data/config'
 
 /** Caixa em conta corrente + aplicações, somando todos os bancos. */
 export function bankBalance(state: GameState): number {
@@ -66,6 +66,45 @@ export function privateHoldingsValue(state: GameState): number {
   return total
 }
 
+/**
+ * Quanto vale um veículo de imprensa.
+ *
+ * **O alcance é piso, sempre.** `valuationOf` grampeia em zero quando a dívida
+ * engole o múltiplo, e havia veículo listado com dívida de R$ 756 mi saindo por
+ * R$ 0,00. Influência não fica de graça porque o balanço está ruim.
+ *
+ * A conta estava copiada em três lugares — a ação de compra, o painel de
+ * imprensa e o runner —, o que é exatamente como duas delas passam a divergir.
+ * Agora é uma só, e é ela que `netWorth` usa.
+ */
+export function outletPrice(state: GameState, outlet: NewsOutlet): Money {
+  const floor = nominal(state.macro, outlet.reach * NEWS.outletPricePerReach)
+  const listed = outlet.companyId ? state.companies[outlet.companyId] : null
+  const industry = listed ? findIndustry(listed.industryId) : null
+  if (!listed || !industry) return floor
+  return Math.max(floor, valuationOf(listed, sectorMultiple(industry.multipleBase, state.macro.selic)))
+}
+
+/**
+ * Valor dos veículos de imprensa do jogador.
+ *
+ * Faltava no patrimônio, e a falta não era um arredondamento: `comprarVeiculo`
+ * debita centenas de milhões, marca o dono e pronto — o placar caía e nunca
+ * mais subia. Comprar jornal era apagar dinheiro.
+ *
+ * É a mesma família do defeito que `privateHoldingsValue` teve: possuir valia
+ * menos que a coisa vale. Patrimônio é o que você consegue por aquilo.
+ */
+export function outletHoldingsValue(state: GameState): Money {
+  let total = 0
+  for (const outletId of state.news.outletOrder) {
+    const outlet = state.news.outlets[outletId]
+    if (!outlet || outlet.ownerId !== 'player') continue
+    total += outletPrice(state, outlet)
+  }
+  return total
+}
+
 /** Soma das dívidas pessoais: empréstimos, cartão e pendência de imposto. */
 export function totalDebt(state: GameState): number {
   let total = 0
@@ -85,6 +124,7 @@ export function netWorth(state: GameState): number {
     bankBalance(state) +
     portfolioValue(state) +
     privateHoldingsValue(state) +
+    outletHoldingsValue(state) +
     assets -
     totalDebt(state)
   )

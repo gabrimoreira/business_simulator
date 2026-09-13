@@ -37,6 +37,10 @@ const SAMPLES: GameAction[] = [
   { kind: 'habilitarMargem', collateral: 10_000 },
   { kind: 'venderDescoberto', companyId: 'pulso', shares: 10 },
   { kind: 'recomprarDescoberto', companyId: 'pulso', shares: 10 },
+  { kind: 'definirQuadroAlvo', companyId: 'pulso', target: 50 },
+  { kind: 'aportarCapital', companyId: 'pulso', amount: 1000 },
+  { kind: 'retirarDaEmpresa', companyId: 'pulso', amount: 1000 },
+  { kind: 'assumirGestao', companyId: 'pulso' },
 ]
 
 describe('nenhum verbo cai no default', () => {

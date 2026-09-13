@@ -174,6 +174,23 @@ conceitos de companhia aberta.
 `ownership` direto: controle é >50%, e não há divulgação obrigatória (é
 exatamente por isso que abrir capital tem custo estratégico — §5.12 Regra 2).
 
+### C14 — As 5 abas do spec §6 vs "onde vejo o que eu tenho" *(decidido)*
+
+O §6 fixa cinco abas. O terceiro playtest apontou que o que o jogador possui
+estava espalhado por quatro telas: ação como uma linha dentro da lista de
+**todas** as empresas da bolsa, bem no Mundo entre banco e política, empresa em
+Negócios, jornal dentro do painel de imprensa, dívida em lugar nenhum. Nenhuma
+tela respondia "o que eu tenho".
+
+**Resolução:** sexta aba, `/patrimonio`, somente leitura. Cada linha leva para a
+tela onde se age sobre ela — um quarto lugar de comprar só dividiria a atenção.
+Custo medido: seis alvos de 60×56 px a 360 px de largura, rótulo de 10 px, sem
+quebra de linha, acima do mínimo de toque do próprio §6.
+
+A alternativa era pôr o patrimônio dentro do Perfil. Foi recusada porque a
+pergunta "o que eu tenho" é feita **durante** a partida, entre uma decisão e
+outra, e não na tela de save e habilidades.
+
 ---
 
 ## 2. Curva de progressão econômica
@@ -208,12 +225,18 @@ patrimônio explosivo do §2.3. O invariante `passive < investor < entrepreneur`
 vale nos dois horizontes; a `tycoon` vale aos 65 e **inverte aos 100** — item em
 aberto, medido e registrado no §7.
 
-**A `tycoon` deixou de medir ruído.** Ela agora compra o veículo de maior alcance
-que couber no caixa, pauta contra o líder do próprio setor e concorre a cargo
-quando carisma, reputação e caixa alcançam. Medida **aos 65**: R$ 1,76 bi
-(seed 42) e R$ 2,72 bi (seed 7), contra R$ 1,19 bi e R$ 3,06 bi do
-`entrepreneur` — alternando, mas porque são estratégias diferentes disputando, e
-não porque eram a mesma coisa.
+**A `tycoon` deixou de medir ruído** — mas metade dela não roda. Ela *tenta*
+comprar o veículo de maior alcance que couber no caixa, pautar contra o líder do
+próprio setor e concorrer a cargo. Medida **aos 65**: R$ 1,76 bi (seed 42) e
+R$ 2,72 bi (seed 7), contra R$ 1,19 bi e R$ 3,06 bi do `entrepreneur`.
+
+**Mas ela nunca chega a comprar jornal** (medido em 2026-09-13, seed 42, 29.949
+dias): o filtro compara o preço com `player.money`, e o dinheiro da `tycoon` vive
+na empresa — no dia 3.000 ela tem R$ 37 mil no bolso contra R$ 1,4 mi do veículo
+mais barato. Como só `comprarVeiculo` escreve `ownerId` e nunca o devolve a
+`null`, não ter nenhum no fim prova que nunca comprou um. O ramo de influência
+dela é letra morta, e é mais um caso do que o §7 chama de instrumento que joga
+mal — provavelmente parte do item em aberto da queda dela em real.
 
 **A `raider` entrou na tabela, e o número dela é a descoberta mais interessante
 desta rodada.** **Aos 65** ela termina em R$ 20–30 M reais e **nunca fecha
@@ -1115,6 +1138,81 @@ própria conta bancária. Vale para o botão de avançar semana e para o catch-u
 offline, não só para a simulação. É a terceira vez que este projeto encontra a
 mesma família de erro — a primeira foi a ordem de débito das contas na Fase 8 —
 e o padrão é sempre o mesmo: **um caminho de dinheiro que enxerga só um bolso.**
+
+### O terceiro playtest: o quadro travado e o jornal que valia zero
+
+Duas queixas, e um defeito que apareceu ao atender a segunda.
+
+**"Por que não posso aumentar o quadro do jeito que eu quiser?"** O botão dizia
+*Contratar 1* e consumia um dos três blocos do dia: pôr 200 pessoas custaria 200
+blocos, ou 67 dias clicando. O jogador achou que estava limitado pela energia —
+não estava: **nenhuma ação de empresa gasta energia**, só bloco.
+
+O incômodo era real, mas o motor já tinha as duas saídas:
+
+- `contratar` sempre aceitou `count` e contrata N por um bloco só. Era a **UI**
+  que mandava `1` fixo.
+- `directives.headcountTarget` já existia e o passo diário já o perseguia em
+  **toda** empresa, inclusive a do jogador, pagando um mês de folha por cabeça
+  do caixa dela.
+
+Ou seja: o RH que o jogador pediu já estava implementado, e o único jeito de
+mexer no alvo era clicar em contratar — que reescrevia o alvo para o quadro
+atual e o deixava parado. Pior: `ai/companyAgent.ts` **já contratava assim**,
+movendo este mesmo campo. O jogador não tinha o verbo que a IA tinha, o que é
+uma quebra da paridade de ações do `CLAUDE.md §4`; expor o alvo fecha a quebra
+em vez de abrir sistema novo.
+
+Uma correção junto: `contratar` passa a fazer `headcountTarget = max(total,
+alvo)`. Sem isso, contratar 10 à vista com um alvo de 500 de pé cancelaria o
+alvo, e o RH pararia sem ninguém ter pedido.
+
+**O jornal que valia zero.** Ao montar a tela de patrimônio apareceu isto:
+`comprarVeiculo` debita o preço — que passa de R$ 700 milhões no veículo mais
+caro —, marca `ownerId: 'player'` e pronto. `netWorth` nunca olhava
+`state.news.outlets`, e **não existe `venderVeiculo`**. Comprar imprensa apagava
+dinheiro do placar, para sempre.
+
+É a terceira vez que este projeto encontra a mesma família de erro, e vale
+registrar o padrão: **um caminho de dinheiro que enxerga só um bolso.** Primeiro
+foi a ordem de débito das contas (Fase 8), depois `autoEat` que não ia ao banco,
+depois `privateHoldingsValue` avaliando empresa por `caixa − dívida` — e agora o
+veículo que sai do caixa e não entra em lugar nenhum. Patrimônio é o que você
+consegue por aquilo, dos dois lados.
+
+A conta do preço estava **copiada em três lugares** (a ação, o painel e o
+runner), que é exatamente como duas delas passam a divergir. Agora é
+`outletPrice` em `selectors.ts`, e é ela que `netWorth` usa.
+
+**A tela de patrimônio e o invariante que a sustenta.** `ui/holdings.ts` agrupa
+caixa, banco, ações, empresas, bens, imprensa e dívidas, e `tests/holdings.spec.ts`
+cobra que a soma dos grupos bata com `netWorth` **ao centavo** — em jogo cheio e
+depois de um ano de mundo rodando. É a mesma disciplina de `ledger.ts` e
+`companyStatement.ts`: um sistema novo que passe a valer dinheiro e não apareça
+aqui derruba o teste, em vez de virar diferença silenciosa na tela.
+
+**A remedição não mexeu em nada, e o motivo é o achado.** As quatro curvas aos
+100 saíram **idênticas ao centavo** às de antes da correção — o que só é possível
+se nenhuma delas possuir veículo no fim. Uma sonda explicou: a `tycoon` tem
+R$ 37 mil de caixa pessoal no dia 3.000 contra R$ 1,4 mi do jornal mais barato,
+porque o dinheiro dela mora na empresa e o filtro da estratégia compara com
+`player.money`. Como só `comprarVeiculo` escreve `ownerId` e nunca o devolve a
+`null`, não ter jornal no dia 29.949 prova que ela **nunca comprou um em 82
+anos**.
+
+Ou seja: o defeito era real e a correção vale para o jogador — que compra jornal
+pela tela e via o patrimônio sumir —, mas o runner nunca o exerceu. Metade da
+`tycoon` (a metade de influência que a distingue do `entrepreneur`) não roda, e
+isso é candidato forte ao item em aberto da queda dela em real. Fica registrado e
+não corrigido nesta rodada: mexer na estratégia move as quatro curvas, e é
+trabalho separado do que o playtest pediu.
+
+Verificação no navegador, que é o que pegou os defeitos que teste nenhum pegou
+nas rodadas anteriores: alvo de 1.609 → 2.500 anunciou *~160/mês, R$ 1,9 mi/mês
+do caixa*; um mês depois o quadro estava em 1.756 (+147, com o ritmo caindo
+junto com a diferença, como a fórmula prevê). Comprar um jornal de R$ 4,3 mi e
+um apartamento de R$ 382 mil deixou o patrimônio **idêntico ao centavo** — que é
+o comportamento certo e era impossível antes.
 
 ### A extensão para os 100 anos, e o que ela expôs
 
