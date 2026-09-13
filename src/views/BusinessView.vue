@@ -401,18 +401,36 @@ function merge(acquirerId: string, targetId: string): void {
         </p>
 
         <div class="mt-2 grid grid-cols-2 gap-2">
+          <!-- Cada botão diz o que **aquele real** compra. Ampliar capacidade só
+               compra máquina; se quem segura a produção é gente, o dinheiro sai
+               e a capacidade não se move — foi exatamente o que o playtest
+               relatou: "não consegui ver efeito além de gastar caixa". -->
           <button
-            class="min-h-[44px] rounded-xl border border-line text-sm font-medium disabled:opacity-30"
+            class="min-h-[44px] rounded-xl border px-2 text-xs leading-tight font-medium disabled:opacity-30"
+            :class="item.statement.bottleneck === 'capital' ? 'border-accent/50 text-accent' : 'border-line'"
             :disabled="!amount || amount > item.company.cash"
             @click="game.dispatch({ kind: 'expandirCapacidade', companyId: item.company.id, investment: amount ?? 0 })"
           >
             Ampliar capacidade
+            <span class="block text-[11px] font-normal text-muted">
+              <template v-if="item.statement.bottleneck === 'capital'">
+                +{{ formatMoneyCompact((amount ?? 0) * item.industry.capitalTurnover) }} de produção
+              </template>
+              <template v-else>não muda nada agora</template>
+            </span>
           </button>
           <button
-            class="min-h-[44px] rounded-xl border border-line text-sm font-medium"
+            class="min-h-[44px] rounded-xl border px-2 text-xs leading-tight font-medium"
+            :class="item.statement.bottleneck === 'mão de obra' ? 'border-accent/50 text-accent' : 'border-line'"
             @click="hire(item.company.id, 1)"
           >
             Contratar 1
+            <span class="block text-[11px] font-normal text-muted">
+              <template v-if="item.statement.bottleneck === 'mão de obra'">
+                +{{ formatMoneyCompact(item.industry.outputPerEmployee * (item.company.workforce.productivity / 100)) }} de produção
+              </template>
+              <template v-else>há gente ociosa</template>
+            </span>
           </button>
           <button
             class="min-h-[44px] rounded-xl border border-line text-sm text-muted"
