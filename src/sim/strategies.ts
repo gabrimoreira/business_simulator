@@ -33,7 +33,7 @@ const RAID_FLOAT_SHARE = 0.2
  * bolsa: a partir daqui só a oferta pública alcança o acionista.
  */
 const RAID_FLOAT_FLOOR = 0.03
-import { monthlyIncome } from '@/engine/banking'
+import { availableCash, monthlyIncome } from '@/engine/banking'
 
 /** Reserva de sobrevivência antes de gastar com matrícula: ~2 meses de custo. */
 const SURVIVAL_BUFFER = 3000
@@ -582,22 +582,93 @@ export function decideActions(state: GameState, strategy: Strategy): GameAction[
 
   // --- influência: jornal e mandato ------------------------------------------
   if (strategy.wieldsInfluence && state.date.dayIndex % 30 === 25) {
-    const owned = state.news.outletOrder.find(
-      (id) => state.news.outlets[id]?.ownerId === 'player',
-    )
-    if (!owned) {
-      // O maior alcance que couber no caixa. Alcance é o que multiplica o
-      // choque de preço da manchete; credibilidade se gasta, alcance não.
+    /**
+     * O veículo de maior alcance que já é dela — e é por alcance, não por
+     * ordem da lista, porque alcance é o que multiplica o choque da manchete.
+     */
+    const owned = state.news.outletOrder
+      .filter((id) => state.news.outlets[id]?.ownerId === 'player')
+      .sort((a, b) => (state.news.outlets[b]?.reach ?? 0) - (state.news.outlets[a]?.reach ?? 0))[0]
+    const melhorAlcance = owned ? (state.news.outlets[owned]?.reach ?? 0) : 0
+
+    {
+      /**
+       * **A `tycoon` não tinha dinheiro no bolso, e por isso nunca comprou
+       * jornal em 82 anos.** O filtro comparava o preço com `player.money`, e o
+       * dinheiro dela mora na empresa e no banco: no dia 3.000 ela tinha R$ 37
+       * mil em mãos contra R$ 1,4 mi do veículo mais barato. Metade da
+       * estratégia — a metade de influência, que é o que a distingue do
+       * `entrepreneur` — era letra morta, e a medição de 82 anos não percebia
+       * porque o resultado era simplesmente "não comprou".
+       *
+       * É o mesmo erro que já apareceu na matrícula e na fundação: **guardar
+       * tudo e nunca sacar significa nunca agir.** A correção é a mesma —
+       * mobilizar o que está parado antes de desistir da compra.
+       */
+      const disponivel = availableCash(state)
+      const reserva = nominal(state.macro, SURVIVAL_BUFFER)
+
+      // Aplicação livre: só a que já passou da carência conta.
+      const liquido = state.banking.accounts
+        .filter(
+          (account) =>
+            account.savingsLockedUntilDayIndex === null ||
+            state.date.dayIndex >= account.savingsLockedUntilDayIndex,
+        )
+        .sort((a, b) => b.savings - a.savings)[0]
+      const resgatavel = Math.max(0, liquido?.savings ?? 0)
+
+      // A **sua fatia** do caixa da empresa, menos o colchão de folha que a
+      // expansão também respeita. Sacar o caixa inteiro compraria o jornal
+      // quebrando a empresa que o sustenta.
+      // A empresa que ela **dirige** — não a primeira em que tem participação:
+      // a `tycoon` é acionista de meia dúzia de listadas por causa do assalto, e
+      // pegar a primeira da lista sacava uma fatia de 5% do caixa de uma
+      // companhia alheia em vez do caixa da própria.
+      const minha = state.companyOrder
+        .map((id) => state.companies[id])
+        .find((company) => company?.managedBy === 'player')
+      const folha = minha ? minha.workforce.headcount * minha.workforce.avgSalary : 0
+      const livreNaEmpresa = minha
+        ? Math.max(0, Math.max(0, minha.cash) - folha * COMPANY_CASH_RESERVE) *
+          stakeOf(minha, 'player')
+        : 0
+
+      const mobilizavel = disponivel + resgatavel + livreNaEmpresa - reserva
       const best = state.news.outletOrder
         .flatMap((id) => {
           const outlet = state.news.outlets[id]
           if (!outlet || outlet.ownerId !== null) return []
           return [{ id, outlet, price: outletPrice(state, outlet) }]
         })
-        .filter((item) => item.price <= player.money - nominal(state.macro, SURVIVAL_BUFFER))
+        // **Alcance estritamente maior.** Sem isto ela comprava o primeiro que
+        // coubesse — o Boletim, de alcance 30 — e ficava presa nele para
+        // sempre, porque não há como vender veículo. Um megafone que ninguém
+        // ouve é o mesmo que nenhum.
+        .filter((item) => item.price <= mobilizavel && item.outlet.reach > melhorAlcance)
         .sort((a, b) => b.outlet.reach - a.outlet.reach)[0]
-      if (best) actions.push({ kind: 'comprarVeiculo', outletId: best.id })
-    } else {
+
+      if (best) {
+        // Saca só o que falta, e da empresa antes do banco: o dinheiro da
+        // empresa está ocioso, o do banco está rendendo.
+        let falta = best.price + reserva - disponivel
+        if (falta > 0 && minha && livreNaEmpresa > 0) {
+          const saque = Math.min(falta, livreNaEmpresa)
+          actions.push({ kind: 'retirarDaEmpresa', companyId: minha.id, amount: saque })
+          falta -= saque
+        }
+        if (falta > 0 && liquido && resgatavel > 0) {
+          actions.push({
+            kind: 'resgatar',
+            bankId: liquido.bankId,
+            amount: Math.min(falta, resgatavel),
+          })
+        }
+        actions.push({ kind: 'comprarVeiculo', outletId: best.id })
+      }
+    }
+
+    if (owned) {
       // Com jornal na mão, ataca o líder do próprio setor: derrubar a percepção
       // do concorrente é o que faz o acionista dele aceitar uma oferta depois.
       const mine = state.companyOrder

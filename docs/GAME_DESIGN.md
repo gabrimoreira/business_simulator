@@ -215,28 +215,26 @@ causa disso — as antigas, medidas aos 65, estão preservadas no §7 como regis
 | `passive` — só trabalha | R$ 2–4 M | teto salarial sem diploma + eventos de vida |
 | `investor` — trabalha, estuda, investe | R$ 500 M – 1,5 B | IR 15%, corretagem, drawdown de recessão |
 | `entrepreneur` — funda e opera | R$ 1,5–5 B | capital de expansão, moral, guerra de preços da IA |
-| `tycoon` — alavanca, adquire, manipula | R$ 0,5–3 B | antitruste, `notoriety`, tycoons rivais |
+| `tycoon` — alavanca, adquire, manipula | R$ 3–10 B | antitruste, `notoriety`, tycoons rivais |
 | `raider` — compra hostil | R$ 150–400 M | float recomprado pelo conselho |
 
-Medido em seed 42, aos 100: `passive` R$ 2,20 M · `tycoon` R$ 617 M ·
-`investor` R$ 865,7 M · `entrepreneur` R$ 1,73 B · `raider` R$ 227,8 M.
-Nenhuma chega perto do teto de
-patrimônio explosivo do §2.3. O invariante `passive < investor < entrepreneur`
-vale nos dois horizontes; a `tycoon` vale aos 65 e **inverte aos 100** — item em
-aberto, medido e registrado no §7.
+Medido em seed 42, aos 100: `passive` R$ 2,20 M · `raider` R$ 227,8 M ·
+`investor` R$ 865,7 M · `entrepreneur` R$ 1,73 B · `tycoon` R$ 5,28 B. O
+invariante `passive < investor < entrepreneur < tycoon` do §2.3 **vale nos dois
+horizontes**.
 
-**A `tycoon` deixou de medir ruído** — mas metade dela não roda. Ela *tenta*
-comprar o veículo de maior alcance que couber no caixa, pautar contra o líder do
-próprio setor e concorrer a cargo. Medida **aos 65**: R$ 1,76 bi (seed 42) e
-R$ 2,72 bi (seed 7), contra R$ 1,19 bi e R$ 3,06 bi do `entrepreneur`.
+Ele esteve invertido por uma rodada — a `tycoon` fechava em R$ 617 M, abaixo da
+`investor` —, e a causa não era balanceamento: metade da estratégia dela não
+rodava (§7). Corrigida, ela salta 8,6×.
 
-**Mas ela nunca chega a comprar jornal** (medido em 2026-09-13, seed 42, 29.949
-dias): o filtro compara o preço com `player.money`, e o dinheiro da `tycoon` vive
-na empresa — no dia 3.000 ela tem R$ 37 mil no bolso contra R$ 1,4 mi do veículo
-mais barato. Como só `comprarVeiculo` escreve `ownerId` e nunca o devolve a
-`null`, não ter nenhum no fim prova que nunca comprou um. O ramo de influência
-dela é letra morta, e é mais um caso do que o §7 chama de instrumento que joga
-mal — provavelmente parte do item em aberto da queda dela em real.
+**A `tycoon` é a única que compra imprensa, e isso é o que a separa do
+`entrepreneur`.** Ela compra o veículo de maior alcance que couber, sobe de
+veículo quando a conta alcança, pauta contra o líder do próprio setor e concorre
+a cargo. Em seed 42 ela leva o Boletim de Mercado (alcance 30) no dia 4.736 e o
+Portal Agora (alcance 95) no 9.746.
+
+Durante oito fases ela **não comprava nenhum** — e o §7 registra o porquê, que é
+a lição de método desta base repetida mais uma vez.
 
 **A `raider` entrou na tabela, e o número dela é a descoberta mais interessante
 desta rodada.** **Aos 65** ela termina em R$ 20–30 M reais e **nunca fecha
@@ -1191,21 +1189,48 @@ depois de um ano de mundo rodando. É a mesma disciplina de `ledger.ts` e
 `companyStatement.ts`: um sistema novo que passe a valer dinheiro e não apareça
 aqui derruba o teste, em vez de virar diferença silenciosa na tela.
 
-**A remedição não mexeu em nada, e o motivo é o achado.** As quatro curvas aos
-100 saíram **idênticas ao centavo** às de antes da correção — o que só é possível
-se nenhuma delas possuir veículo no fim. Uma sonda explicou: a `tycoon` tem
-R$ 37 mil de caixa pessoal no dia 3.000 contra R$ 1,4 mi do jornal mais barato,
-porque o dinheiro dela mora na empresa e o filtro da estratégia compara com
-`player.money`. Como só `comprarVeiculo` escreve `ownerId` e nunca o devolve a
-`null`, não ter jornal no dia 29.949 prova que ela **nunca comprou um em 82
-anos**.
+**A remedição não mexeu em nada, e foi isso que entregou o resto.** As quatro
+curvas aos 100 saíram **idênticas ao centavo** às de antes da correção — o que só
+é possível se nenhuma delas possuir veículo no fim. Uma sonda explicou: a
+`tycoon` tinha R$ 37 mil de caixa pessoal no dia 3.000 contra R$ 1,4 mi do jornal
+mais barato, porque o dinheiro dela mora na empresa e no banco enquanto o filtro
+da estratégia comparava com `player.money`. Como só `comprarVeiculo` escreve
+`ownerId` e nunca o devolve a `null`, não ter jornal no dia 29.949 provava que
+ela **nunca comprou um em 82 anos**.
 
-Ou seja: o defeito era real e a correção vale para o jogador — que compra jornal
-pela tela e via o patrimônio sumir —, mas o runner nunca o exerceu. Metade da
-`tycoon` (a metade de influência que a distingue do `entrepreneur`) não roda, e
-isso é candidato forte ao item em aberto da queda dela em real. Fica registrado e
-não corrigido nesta rodada: mexer na estratégia move as quatro curvas, e é
-trabalho separado do que o playtest pediu.
+### A `tycoon` que não comprava jornal — e a inversão que ela causava
+
+Metade da `tycoon` — a metade de influência, que é o que a distingue do
+`entrepreneur` — nunca rodou. **É a quinta vez que esta base confunde estratégia
+que joga mal com motor desbalanceado**, e desta vez o preço foi uma inversão do
+invariante mais importante do §2.3: ela fechava os 100 em R$ 617 M reais, abaixo
+da `investor`, e a rodada anterior registrou isso como "item em aberto, provável
+problema de balanceamento".
+
+Não era. Era o mesmo erro que já apareceu na matrícula e na fundação — **guardar
+tudo e nunca sacar significa nunca agir**:
+
+| O que estava errado | Sintoma medido | Correção |
+|---|---|---|
+| o preço era comparado com `player.money` | R$ 37 mil no bolso contra R$ 1,4 mi do veículo mais barato: nenhuma compra em 82 anos | mobiliza antes de desistir — saca a **sua fatia** do caixa da empresa (menos o colchão de um mês de folha) e resgata a aplicação livre |
+| comprava o primeiro veículo que coubesse | levaria o Boletim, de alcance 30, e ficaria preso nele — não há como vender veículo | só compra alcance **estritamente maior** que o que já tem, e pauta pelo de maior alcance |
+| a retirada mirava a primeira empresa com participação | ela é acionista de 22 listadas por causa do assalto: sacaria 5% do caixa de uma companhia alheia | mira a que ela **dirige**, como o resto da estratégia |
+
+Resultado em seed 42: compra o Boletim de Mercado (alcance 30) no dia 4.736,
+sobe para o Portal Agora (alcance 95) no 9.746 — quando o valuation dele fica ao
+alcance do caixa da empresa — e fecha os 100 com **R$ 5,28 bi reais** contra os
+R$ 617 M de antes, 8,6×. A empresa dela sai de R$ 10,5 bi para R$ 34,3 bi
+nominais: pautar contra o líder do próprio setor é o mecanismo que o jogo sempre
+teve e que ninguém estava exercendo.
+
+**A inversão do §2.3 sumiu junto.** A ordem
+`passive < investor < entrepreneur < tycoon` volta a valer aos 100, sem que
+nenhuma constante de balanceamento fosse tocada. E o salto de 8,6× não troca uma
+reprovação por outra: medido década a década, o patrimônio dela bate no máximo
+**0,2% do mercado agregado** (pico no dia 18.250), contra o teto de 20% do
+critério de patrimônio explosivo — o mercado cresce mais rápido que ela. O item ficou em aberto por uma
+rodada exatamente porque a regra da casa é não chutar constante antes de provar
+que a estratégia sabe jogar — e aqui ela não sabia.
 
 Verificação no navegador, que é o que pegou os defeitos que teste nenhum pegou
 nas rodadas anteriores: alvo de 1.609 → 2.500 anunciou *~160/mês, R$ 1,9 mi/mês
