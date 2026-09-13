@@ -199,10 +199,11 @@ causa disso — as antigas, medidas aos 65, estão preservadas no §7 como regis
 | `investor` — trabalha, estuda, investe | R$ 500 M – 1,5 B | IR 15%, corretagem, drawdown de recessão |
 | `entrepreneur` — funda e opera | R$ 1,5–5 B | capital de expansão, moral, guerra de preços da IA |
 | `tycoon` — alavanca, adquire, manipula | R$ 0,5–3 B | antitruste, `notoriety`, tycoons rivais |
-| `raider` — compra hostil | *(ainda medindo aos 100)* | float recomprado pelo conselho |
+| `raider` — compra hostil | R$ 150–400 M | float recomprado pelo conselho |
 
 Medido em seed 42, aos 100: `passive` R$ 2,20 M · `tycoon` R$ 617 M ·
-`investor` R$ 865,7 M · `entrepreneur` R$ 1,73 B. Nenhuma chega perto do teto de
+`investor` R$ 865,7 M · `entrepreneur` R$ 1,73 B · `raider` R$ 227,8 M.
+Nenhuma chega perto do teto de
 patrimônio explosivo do §2.3. O invariante `passive < investor < entrepreneur`
 vale nos dois horizontes; a `tycoon` vale aos 65 e **inverte aos 100** — item em
 aberto, medido e registrado no §7.
@@ -216,7 +217,11 @@ não porque eram a mesma coisa.
 
 **A `raider` entrou na tabela, e o número dela é a descoberta mais interessante
 desta rodada.** **Aos 65** ela termina em R$ 20–30 M reais e **nunca fecha
-controle de nada**. Não é bug: é o conselho funcionando. Ver o §7.
+controle de nada**. Não é bug: é o conselho funcionando. Ver o §7. Aos 100 ela
+faz R$ 227,8 M reais — R$ 5,46 bi nominais, **inteiros em carteira, nenhuma
+empresa** — o que confirma o diagnóstico em oitenta anos em vez de quarenta: ela
+não é uma compradora hostil, é uma `investor` que gasta prêmio em OPA que não
+fecha.
 
 A coluna "1º milhão" saiu da tabela. Ela media a travessia de um limiar fixo em
 um jogo cuja inflação corre por oito décadas, então dizia coisas diferentes
@@ -1121,7 +1126,8 @@ O que a medição mostrou não foi uma faixa fora do lugar. Foi isto, em seed 42
 
 | Estratégia | Real aos 65 | Real aos 100 | Nominal aos 100 |
 |---|---|---|---|
-| `passive` | — | R$ 2,20 M | R$ 46,6 M |
+| `passive` | — | R$ 2,20 M |
+| `raider` | R$ 20–30 M | R$ 227,8 M | R$ 46,6 M |
 | `investor` | R$ 99,1 M | R$ 865,7 M | R$ 19,4 B |
 | `entrepreneur` | — | R$ 1,73 B | R$ 38,5 B |
 | `tycoon` | **R$ 1,057 B** | **R$ 617 M** | R$ 13,2 B |
