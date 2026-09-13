@@ -68,6 +68,27 @@ const delegating = ref<string | null>(null)
 const profiles = computed(() => Object.values(game.state?.ai.profiles ?? {}))
 
 /** Delegação da resolução C2: o late game é nomear personalidades, não clicar. */
+/** Quanto do caixa da empresa é seu, pela participação que você tem. */
+function withdrawLimit(companyId: string): number {
+  const state = game.state
+  const company = state?.companies[companyId]
+  if (!state || !company) return 0
+  return Math.max(0, company.cash) * stakeOf(company, 'player')
+}
+
+function inject(companyId: string): void {
+  if (!amount.value || amount.value <= 0) return
+  game.dispatch({ kind: 'aportarCapital', companyId, amount: amount.value })
+}
+
+function withdraw(companyId: string): void {
+  // Sem valor digitado, retira a fatia inteira que lhe cabe.
+  const limit = withdrawLimit(companyId)
+  const value = amount.value && amount.value > 0 ? Math.min(amount.value, limit) : limit
+  if (value <= 0) return
+  game.dispatch({ kind: 'retirarDaEmpresa', companyId, amount: value })
+}
+
 function takeBack(companyId: string): void {
   game.dispatch({ kind: 'assumirGestao', companyId })
 }
@@ -399,6 +420,29 @@ function merge(acquirerId: string, targetId: string): void {
           {{ item.statement.quartersToBankruptcy - item.statement.negativeQuarters }}
           e a empresa vai a recuperação judicial.
         </p>
+
+        <!-- Dinheiro entre o seu bolso e o da empresa. O campo de valor acima
+             serve aos dois. -->
+        <div class="mt-2 grid grid-cols-2 gap-2">
+          <button
+            class="min-h-[44px] rounded-xl border border-line px-2 text-xs leading-tight font-medium disabled:opacity-30"
+            :disabled="!amount || amount > (game.state?.player.money ?? 0)"
+            @click="inject(item.company.id)"
+          >
+            Aportar do meu bolso
+            <span class="block text-[11px] font-normal text-muted">vira caixa da empresa</span>
+          </button>
+          <button
+            class="min-h-[44px] rounded-xl border border-line px-2 text-xs leading-tight font-medium disabled:opacity-30"
+            :disabled="withdrawLimit(item.company.id) <= 0"
+            @click="withdraw(item.company.id)"
+          >
+            Retirar para mim
+            <span class="tnum block text-[11px] font-normal text-muted">
+              até {{ formatMoneyCompact(withdrawLimit(item.company.id)) }}
+            </span>
+          </button>
+        </div>
 
         <div class="mt-2 grid grid-cols-2 gap-2">
           <!-- Cada botão diz o que **aquele real** compra. Ampliar capacidade só

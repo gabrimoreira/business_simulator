@@ -2008,6 +2008,67 @@ export function applyAction(state: GameState, action: GameAction): ActionResult 
         return
       }
 
+      /**
+       * Dinheiro entre o dono e a empresa, nos dois sentidos.
+       *
+       * Faltava: `pagarDividendos` distribui lucro no fecho do trimestre, e não
+       * havia como socorrer a própria empresa com o dinheiro do bolso nem tirar
+       * caixa dela fora da data. Fundar com R$ 60 mil e assistir à falta de
+       * caixa com milhões na conta pessoal era a situação que isto resolve.
+       */
+      case 'aportarCapital': {
+        const company = draft.companies[action.companyId]
+        if (!company || stakeOf(company, 'player') <= 0) {
+          log.push(entry('ruim', 'Você não tem participação nessa empresa.'))
+          return
+        }
+        if (action.amount <= 0 || availableCash(state) < action.amount) {
+          log.push(entry('ruim', 'Você não tem esse dinheiro.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        player.blocksUsedToday += 1
+        debit(draft, action.amount)
+        company.cash += action.amount
+        log.push(entry('info', `Aporte em ${company.name}.`, -action.amount))
+        return
+      }
+
+      case 'retirarDaEmpresa': {
+        const company = draft.companies[action.companyId]
+        if (!company) {
+          log.push(entry('ruim', 'Empresa desconhecida.'))
+          return
+        }
+        const stake = stakeOf(company, 'player')
+        if (stake <= 0) {
+          log.push(entry('ruim', 'Você não tem participação nessa empresa.'))
+          return
+        }
+        if (blocksLeft(state) < 1) {
+          log.push(entry('ruim', 'Sem blocos de ação hoje.'))
+          return
+        }
+        // **Só a sua parte.** O caixa da empresa é dos acionistas na proporção
+        // que cada um tem; sacar além disso é tirar do bolso dos outros, e num
+        // jogo sobre capital essa distinção é a regra, não um detalhe.
+        const limit = Math.max(0, company.cash) * stake
+        if (action.amount <= 0 || action.amount > limit) {
+          log.push(
+            entry('ruim', `Você pode retirar até ${Math.round(limit)} — a sua fatia do caixa.`),
+          )
+          return
+        }
+        player.blocksUsedToday += 1
+        company.cash -= action.amount
+        player.money += action.amount
+        log.push(entry('bom', `Retirada de ${company.name}.`, action.amount))
+        return
+      }
+
       default:
         // Ações das fases seguintes; `avancarTempo` é roteada para runDays.
         log.push(entry('ruim', `Ação ainda não implementada: ${action.kind}.`))

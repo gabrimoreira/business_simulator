@@ -370,3 +370,67 @@ describe('retomar a gestão', () => {
     expect(result.log.some((e) => e.text.includes('já dirige'))).toBe(true)
   })
 })
+
+describe('dinheiro entre o dono e a empresa', () => {
+  function comEmpresa(stake = 1) {
+    const state = funded(fresh(), 10_000_000)
+    const company = state.companies['pulso']!
+    const shares = totalShares(company)
+    const minhas = Math.round(shares * stake)
+    return {
+      ...state,
+      companies: {
+        ...state.companies,
+        pulso: {
+          ...company,
+          cash: 1_000_000,
+          managedBy: 'player' as const,
+          ownership: [
+            { holderId: 'player', shares: minhas },
+            { holderId: 'float', shares: shares - minhas },
+          ],
+        },
+      },
+    }
+  }
+
+  it('aportar tira do bolso e põe no caixa da empresa', () => {
+    const antes = comEmpresa()
+    const depois = applyAction(antes, {
+      kind: 'aportarCapital',
+      companyId: 'pulso',
+      amount: 500_000,
+    }).state
+    expect(depois.player.money).toBe(antes.player.money - 500_000)
+    expect(depois.companies['pulso']!.cash).toBe(antes.companies['pulso']!.cash + 500_000)
+  })
+
+  it('retirar leva só a sua fatia do caixa', () => {
+    // Metade das ações: metade do caixa. Sacar além disso é tirar do bolso dos
+    // outros acionistas, e num jogo sobre capital isso é regra, não detalhe.
+    const meio = comEmpresa(0.5)
+    const demais = applyAction(meio, {
+      kind: 'retirarDaEmpresa',
+      companyId: 'pulso',
+      amount: 900_000,
+    })
+    expect(demais.log.some((e) => e.text.includes('sua fatia'))).toBe(true)
+    expect(demais.state.companies['pulso']!.cash).toBe(1_000_000)
+
+    const cabe = applyAction(meio, {
+      kind: 'retirarDaEmpresa',
+      companyId: 'pulso',
+      amount: 500_000,
+    }).state
+    expect(cabe.companies['pulso']!.cash).toBe(500_000)
+    expect(cabe.player.money).toBe(meio.player.money + 500_000)
+  })
+
+  it('quem não tem participação não aporta nem retira', () => {
+    const fora = funded(fresh(), 10_000_000)
+    for (const kind of ['aportarCapital', 'retirarDaEmpresa'] as const) {
+      const r = applyAction(fora, { kind, companyId: 'pulso', amount: 1000 })
+      expect(r.log.some((e) => e.text.includes('não tem participação'))).toBe(true)
+    }
+  })
+})

@@ -24,7 +24,14 @@ export const ACTION_BLOCKS_PER_DAY = 3
 export const FAST_FORWARD_STEPS = [7, 30] as const
 
 export const START_AGE = 18
-export const RETIREMENT_AGE = 65
+/**
+ * Idade em que a partida se encerra por aposentadoria.
+ *
+ * Eram 65, e 47 anos de jogo. Foi para 100 a pedido: 82 anos de partida, o que
+ * estica a corrida do runner de 17.155 para ~30.000 dias e dá 35 anos a mais de
+ * composição — as faixas do `GAME_DESIGN §2.1` foram remedidas por causa disso.
+ */
+export const RETIREMENT_AGE = 100
 
 /** Data inicial da partida. */
 export const START_DAY = 1

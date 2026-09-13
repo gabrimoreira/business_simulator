@@ -1155,6 +1155,8 @@ export type GameAction =
   | { kind: 'venderDivisao'; companyId: EntityId; fraction: Ratio }
   | { kind: 'nomearCeo'; companyId: EntityId; profileId: ArchetypeId }
   | { kind: 'assumirGestao'; companyId: EntityId }
+  | { kind: 'aportarCapital'; companyId: EntityId; amount: Money }
+  | { kind: 'retirarDaEmpresa'; companyId: EntityId; amount: Money }
   | { kind: 'anunciarProduto'; companyId: EntityId; spend: Money }
   | { kind: 'lancarOpa'; companyId: EntityId; premium: Ratio; sharesSought: number }
   | { kind: 'responderOpa'; tenderId: EntityId; accept: boolean }

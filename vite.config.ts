@@ -1,11 +1,37 @@
 import { fileURLToPath, URL } from 'node:url'
+import { execSync } from 'node:child_process'
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+/**
+ * Carimbo de build, para responder "a versão nova chegou?" de dentro do app.
+ *
+ * A Vercel expõe `VERCEL_GIT_COMMIT_SHA` no build; localmente cai para o commit
+ * do git, e se nem isso existir, para `dev`. Fica visível no Perfil: sem ele, a
+ * única forma de conferir um deploy era abrir o painel da Vercel e comparar
+ * hashes na mão.
+ */
+function buildStamp(): string {
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? gitSha()
+  const when = new Date().toISOString().slice(0, 16).replace('T', ' ')
+  return sha ? `${sha.slice(0, 7)} · ${when}` : `dev · ${when}`
+}
+
+function gitSha(): string {
+  try {
+    return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()
+  } catch {
+    return ''
+  }
+}
+
 export default defineConfig({
   base: '/',
+  define: {
+    __BUILD__: JSON.stringify(buildStamp()),
+  },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

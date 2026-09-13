@@ -14,6 +14,9 @@ import { useFlash } from '@/ui/useFlash'
 
 const game = useGameStore()
 
+/** Carimbo injetado em tempo de build por `vite.config.ts`. */
+const build = __BUILD__
+
 // Patrimônio líquido pisca junto com o caixa: é o placar do jogo.
 const worthFlash = useFlash(() => game.playerNetWorth, 0.005)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -351,9 +354,12 @@ function quit(): void {
           Apagar partida
         </button>
         <p v-if="message" class="selectable px-1 text-xs text-muted">{{ message }}</p>
-        <p class="px-1 text-xs text-muted">
+        <p class="selectable px-1 text-xs text-muted">
           Versão do save: {{ game.state?.saveVersion }} · seed {{ game.state?.rng.seed }}
         </p>
+        <!-- O carimbo do build: é assim que se confere, de dentro do app, se o
+             deploy que está no ar é o commit esperado. -->
+        <p class="selectable px-1 text-xs text-muted">Build: {{ build }}</p>
       </div>
     </section>
   </div>

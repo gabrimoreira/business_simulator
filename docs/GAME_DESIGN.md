@@ -180,7 +180,7 @@ exatamente por isso que abrir capital tem custo estratégico — §5.12 Regra 2)
 
 As quatro estratégias do runner (§7), com a aritmética que sustenta cada número.
 Tudo em **R$ constantes do ano 0**. Jogador começa aos 18 com R$ 0 e sem
-qualificação; aposentadoria aos 65 (47 anos de jogo = 17.155 dias).
+qualificação; aposentadoria aos 100 (82 anos de jogo ≈ 29.950 dias).
 
 ### 2.1 Alvos
 
@@ -189,30 +189,41 @@ A versão anterior desta tabela foi escrita antes de existir motor, e o §7
 registra a cadeia de defeitos que fez as medições contradizerem-na por oito
 fases. Onde a aritmética de projeto e o runner discordam, quem manda é o runner.
 
-| Estratégia | Patrimônio aos 65 (real) | Freio principal |
+**Horizonte: dos 18 aos 100** (82 anos, ~29.950 dias). Era até os 65; a extensão
+acrescentou 35 anos de composição e as faixas abaixo foram **remedidas** por
+causa disso — as antigas, medidas aos 65, estão preservadas no §7 como registro.
+
+| Estratégia | Patrimônio aos 100 (real) | Freio principal |
 |---|---|---|
-| `passive` — só trabalha | R$ 1–2 M | teto salarial sem diploma + eventos de vida |
-| `investor` — trabalha, estuda, investe | R$ 50–150 M | IR 15%, corretagem, drawdown de recessão |
-| `entrepreneur` — funda e opera | R$ 1–5 B | capital de expansão, moral, guerra de preços da IA |
-| `tycoon` — alavanca, adquire, manipula | R$ 1,5–5 B | antitruste, `notoriety`, tycoons rivais |
-| `raider` — compra hostil | R$ 20–50 M | float recomprado pelo conselho |
+| `passive` — só trabalha | R$ 2–4 M | teto salarial sem diploma + eventos de vida |
+| `investor` — trabalha, estuda, investe | R$ 500 M – 1,5 B | IR 15%, corretagem, drawdown de recessão |
+| `entrepreneur` — funda e opera | R$ 1,5–5 B | capital de expansão, moral, guerra de preços da IA |
+| `tycoon` — alavanca, adquire, manipula | R$ 0,5–3 B | antitruste, `notoriety`, tycoons rivais |
+| `raider` — compra hostil | *(ainda medindo aos 100)* | float recomprado pelo conselho |
+
+Medido em seed 42, aos 100: `passive` R$ 2,20 M · `tycoon` R$ 617 M ·
+`investor` R$ 865,7 M · `entrepreneur` R$ 1,73 B. Nenhuma chega perto do teto de
+patrimônio explosivo do §2.3. O invariante `passive < investor < entrepreneur`
+vale nos dois horizontes; a `tycoon` vale aos 65 e **inverte aos 100** — item em
+aberto, medido e registrado no §7.
 
 **A `tycoon` deixou de medir ruído.** Ela agora compra o veículo de maior alcance
 que couber no caixa, pauta contra o líder do próprio setor e concorre a cargo
-quando carisma, reputação e caixa alcançam. Medida: R$ 1,76 bi (seed 42) e
-R$ 2,72 bi (seed 7), contra R$ 1,19 bi e R$ 3,06 bi do `entrepreneur` — ainda
-alternando, mas agora porque são estratégias diferentes disputando, e não porque
-eram a mesma coisa.
+quando carisma, reputação e caixa alcançam. Medida **aos 65**: R$ 1,76 bi
+(seed 42) e R$ 2,72 bi (seed 7), contra R$ 1,19 bi e R$ 3,06 bi do
+`entrepreneur` — alternando, mas porque são estratégias diferentes disputando, e
+não porque eram a mesma coisa.
 
 **A `raider` entrou na tabela, e o número dela é a descoberta mais interessante
-desta rodada.** Ela termina em R$ 20–30 M reais e **nunca fecha controle de
-nada**. Não é bug: é o conselho funcionando. Ver o §7.
+desta rodada.** **Aos 65** ela termina em R$ 20–30 M reais e **nunca fecha
+controle de nada**. Não é bug: é o conselho funcionando. Ver o §7.
 
 A coluna "1º milhão" saiu da tabela. Ela media a travessia de um limiar fixo em
-um jogo cuja inflação corre por 47 anos, então dizia coisas diferentes conforme o
-ano em que a travessia acontecia — e a diferença entre o marco nominal e o real
-chegava a catorze anos. O patrimônio real aos 65 é o único número que compara
-duas estratégias sem essa ambiguidade.
+um jogo cuja inflação corre por oito décadas, então dizia coisas diferentes
+conforme o ano em que a travessia acontecia — e a diferença entre o marco nominal
+e o real chegava a catorze anos. O patrimônio **real** no fim da partida é o
+único número que compara duas estratégias sem essa ambiguidade — e a queda da
+`tycoon` entre os 65 e os 100 só é visível porque a comparação é em real.
 
 ### 2.2 De onde vêm esses números
 
@@ -1099,6 +1110,42 @@ própria conta bancária. Vale para o botão de avançar semana e para o catch-u
 offline, não só para a simulação. É a terceira vez que este projeto encontra a
 mesma família de erro — a primeira foi a ordem de débito das contas na Fase 8 —
 e o padrão é sempre o mesmo: **um caminho de dinheiro que enxerga só um bolso.**
+
+### A extensão para os 100 anos, e o que ela expôs
+
+A partida ia dos 18 aos 65. Foi para os 100 a pedido — 82 anos, ~29.950 dias — e
+as faixas do §2.1 foram remedidas, porque 35 anos a mais de composição mudam
+todas elas.
+
+O que a medição mostrou não foi uma faixa fora do lugar. Foi isto, em seed 42:
+
+| Estratégia | Real aos 65 | Real aos 100 | Nominal aos 100 |
+|---|---|---|---|
+| `passive` | — | R$ 2,20 M | R$ 46,6 M |
+| `investor` | R$ 99,1 M | R$ 865,7 M | R$ 19,4 B |
+| `entrepreneur` | — | R$ 1,73 B | R$ 38,5 B |
+| `tycoon` | **R$ 1,057 B** | **R$ 617 M** | R$ 13,2 B |
+
+**A `tycoon` encolhe em termos reais depois dos 65.** Em nominal ela continua
+subindo — R$ 5,6 B para R$ 13,2 B —, mas isso dá ~2,5% ao ano contra inflação
+rodando perto de 3,5%. Trinta e cinco anos assim cortam o patrimônio real pela
+metade. A `investor`, no mesmo trecho, faz 8,7× em real.
+
+Isso **inverte** o `investor < tycoon` do §2.3 no horizonte novo, e fica
+registrado como item em aberto, não como resolvido. Duas razões para não corrigir
+no impulso:
+
+1. O critério do §2.3 é avaliado aos 10 anos e aos 65, e nos dois a ordem está
+   certa. A inversão vive num trecho de jogo que até agora não existia.
+2. A lição mais cara desta base é a do rebaseline, logo acima: **um instrumento
+   que joga mal não reprova o motor, reprova a si mesmo.** A `tycoon` do runner
+   foi escrita para uma partida que acabava aos 65 e provavelmente para de
+   crescer quando o plano dela termina — empresa madura, caixa parado, nenhuma
+   aquisição nova. Antes de mexer em constante de balanceamento é preciso olhar
+   a série anual da empresa (receita, quadro, capital, aquisições) e separar
+   "o motor trava" de "a estratégia acabou o roteiro". Enquanto isso não for
+   feito, qualquer ajuste é palpite — e já houve três seguidos no monopólio da
+   `saude`.
 
 ### A `raider` e o que ela provou
 

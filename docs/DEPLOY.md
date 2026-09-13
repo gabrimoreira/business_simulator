@@ -7,7 +7,7 @@ servidor.
 ## Antes de publicar
 
 ```bash
-npx vitest run     # 261 testes
+npx vitest run     # 317 testes
 npm run build      # falha se houver erro de tipo: o script roda vue-tsc -b antes do vite build
 npm run preview    # serve o build; é ele que vai para o ar, não o dev server
 ```
@@ -65,6 +65,26 @@ de verdade.
 3. **Publicar uma segunda vez** e reabrir o app instalado. Ele tem de atualizar
    sozinho. Se não atualizar, o problema está nos cabeçalhos acima — não no
    código.
+
+## Como saber se a versão nova chegou no app
+
+O rodapé do **Perfil** mostra `Build: <sha curto> · <data>`, injetado em tempo de
+build por `vite.config.ts` (`VERCEL_GIT_COMMIT_SHA` na Vercel, o commit do git
+localmente). Comparar esse hash com o do commit que você publicou responde a
+pergunta sem abrir o painel da Vercel.
+
+**Uma aba já aberta não se atualiza sozinha.** O `registerSW.js` registra o
+service worker e o `autoUpdate` só age na próxima vez que o navegador revalida:
+na prática, ao fechar e reabrir o app instalado, ou com um recarregamento. Se o
+hash não mudou, feche todas as abas/instâncias do app e abra de novo — antes de
+suspeitar do deploy.
+
+**E o save que já existe continua valendo.** Mudança de regra entra na hora, na
+partida aberta, porque a regra mora no código e não no save: a extensão para os
+100 anos, por exemplo, passa a valer para quem já está jogando aos 40. O que
+**não** muda retroativamente é o que já foi gravado no estado — histórico de
+preço, dinheiro, empresas fundadas. Campo novo em save antigo é assunto da
+pipeline de migrations (`saveVersion`), não do deploy.
 
 ## O que não existe de propósito
 

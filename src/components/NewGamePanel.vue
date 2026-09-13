@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { RETIREMENT_AGE } from '@/data/config'
 import { ref } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { START_AGE } from '@/data/config'
@@ -40,7 +41,7 @@ async function start(): Promise<void> {
       </h1>
       <p class="mt-3 max-w-[38ch] text-sm leading-relaxed text-muted">
         Trabalhe, estude, invista, funde empresas. Compre o jornal que conta a história e financie
-        quem escreve as regras. Até os 65.
+        quem escreve as regras. Até os {{ RETIREMENT_AGE }}.
       </p>
     </div>
 

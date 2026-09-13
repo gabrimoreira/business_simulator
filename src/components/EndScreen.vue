@@ -2,12 +2,12 @@
 import { computed } from 'vue'
 import { useGameStore } from '@/stores/game'
 import { formatMoneyCompact } from '@/lib/format'
-import { ENDGAME } from '@/data/config'
+import { ENDGAME, RETIREMENT_AGE } from '@/data/config'
 
 const game = useGameStore()
 
 const ENDING_TITLE: Record<string, string> = {
-  aposentadoria: 'Você chegou aos 65',
+  aposentadoria: `Você chegou aos ${RETIREMENT_AGE}`,
   morte: 'Fim da linha',
   falencia: 'Você quebrou',
   prisao: 'A conta chegou',
